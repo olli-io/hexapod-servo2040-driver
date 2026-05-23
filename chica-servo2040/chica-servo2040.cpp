@@ -29,6 +29,12 @@ WS2812 led_bar(servo2040::NUM_LEDS, pio1, 0, servo2040::LED_DATA);
 
 uint servoEnabled = false;
 
+/* Over-current trip state. While latched, SET RELAY 1 is refused; SET RELAY 0
+ * clears the latch (an explicit disable always succeeds and re-arms). */
+static bool     overcurrent_tripped     = false;
+static uint64_t overcurrent_since_us    = 0;	// 0 = currently below threshold
+static uint64_t last_current_sample_us  = 0;
+
 int main()
 {
 	/*******************************************************************************
@@ -63,6 +69,10 @@ int main()
 	{
 		/* Monitor and parse serial data */
 		parse_and_command_task();
+
+		/* Background safety: latch a fault if the rail draws too much for
+		 * too long, drop the relay, and disable the servo cluster. */
+		overcurrent_check();
 
 	} // while(1)
 }
@@ -129,13 +139,17 @@ static void apply_set(cmdPkt &p)
 		else if (p.startIdx >= RELAY)
 		{
 			bool enableState = p.valueBuff[idx] ? true : false;
-			gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), enableState);
 			if (p.startIdx == RELAY)
 			{
+				// Explicit disable always wins and clears any latched trip.
+				if (!enableState) overcurrent_tripped = false;
+				// Refuse re-enable while the trip is latched; leave A0 LOW.
+				if (overcurrent_tripped) continue;
 				servoEnabled = enableState;
 				if (enableState) servos.enable_all();
 				else             servos.disable_all();
 			}
+			gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), enableState);
 		}
 	}
 }
@@ -266,6 +280,44 @@ void pendingVCP_ledSequence(void)
 	}
 
 	sleep_ms(1000 / updates);
+}
+
+/*******************************************************************************
+ * Safety Functions
+ ******************************************************************************/
+void overcurrent_check(void)
+{
+	if (overcurrent_tripped) return;
+	if (!servoEnabled)
+	{
+		// Cleared every time the cluster is disabled so that the next enable
+		// starts the debounce window from zero (avoids inrush carrying over).
+		overcurrent_since_us = 0;
+		return;
+	}
+
+	uint64_t now = time_us_64();
+	if (now - last_current_sample_us < OVERCURRENT_SAMPLE_US) return;
+	last_current_sample_us = now;
+
+	if (read_current() >= OVERCURRENT_THRESHOLD_A)
+	{
+		if (overcurrent_since_us == 0)
+		{
+			overcurrent_since_us = now;
+		}
+		else if (now - overcurrent_since_us >= OVERCURRENT_DEBOUNCE_US)
+		{
+			overcurrent_tripped  = true;
+			servoEnabled         = false;
+			servos.disable_all();
+			gpio_put(A0_GPIO_PIN, 0);
+		}
+	}
+	else
+	{
+		overcurrent_since_us = 0;
+	}
 }
 
 /*******************************************************************************

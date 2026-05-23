@@ -52,6 +52,11 @@ constexpr float b1024_3_3V_RATIO	= 310.3f;
 constexpr float b1024_5V_RATIO		= 204.8f;
 constexpr float CURR_LSb			= 0.0814f;
 
+/* Over-current trip */
+constexpr float    OVERCURRENT_THRESHOLD_A	= 10.0f;
+constexpr uint64_t OVERCURRENT_DEBOUNCE_US	= 1000000;
+constexpr uint64_t OVERCURRENT_SAMPLE_US	= 10000;
+
 /*******************************************************************************
  * Enumerations
  ******************************************************************************/
@@ -110,6 +115,10 @@ constexpr uint RP_hardwarePins_table[] =
  * Core Functions
  ******************************************************************************/
 void parse_and_command_task(
+void
+);
+
+void overcurrent_check(
 void
 );
 
