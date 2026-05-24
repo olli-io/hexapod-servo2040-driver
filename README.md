@@ -11,40 +11,26 @@ This driver targets [Pimoroni's Servo 2040 board](https://shop.pimoroni.com/prod
 > The full wire protocol used by this fork is documented in [`protocol.md`](protocol.md).
 
 ### ***External Power Warning***:
-This application requires an external power source greater than 5V to power the servos through the terminal block of the board.  **If you want to run servos with a higher voltage than 5V, you need to _cut the 'Separate USB and Ext. Power' trace on the back of the board_ to prevent the RP2040 or _your machine_ being damaged by the increased voltage.**
+**When you are running servos with a higher voltage than 5V, you need to _cut the 'Separate USB and Ext. Power' trace on the back of the board_ to prevent the RP2040 or _your machine_ being damaged by the increased voltage.**
+**The board is rated for 10A continuous power**
+### ***Battery Power Warning***:
+If the Servo 2040 can be powered by a 5V battery through the 5V/GND pins, instead of through the USB-C port. **When sourcing power through the 5V pins, it's important to _use a data-only USB adapter/cable_ to program the board.** This will prevent the 5V battery from backfeeding to the 5V source provided by the USB device. You can you a normal cable,
+but the 5V/GND pins must be removed prior to connecting the powered usb.
 
 ## Loading the Firmware Image
 To load the firmware onto the Servo 2040 board:
-1) **Read the warnings below.**
-
+1) **Read the warnings before**
 2) Plug in the USB-C cable to your machine. Hold down the "boot/user" button, press the reset button at the same time, and let go of both buttons. The RP2040 should now appear as a drive to the computer.
-
 3) Drag and drop the corresponding `.uf2` image file onto the RP2040 drive. The device will automatically reboot and start the loaded program.
 
 # Hardware
-## Servo 2040
-
-### [Schematics](https://cdn.shopify.com/s/files/1/0174/1800/files/servo2040_schematic.pdf?v=1648817752)
-
-Details from the [Pimoroni's website](https://shop.pimoroni.com/products/servo-2040?variant=39800591679571):
-> The servo 2040 is a standalone servo controller for making things with lots of moving parts. It has pre-soldered pin headers for plugging in up to 18 servos - enough for the leggiest of hexapod walkers or plenty of degrees of freedom for your robotic arms, legs or tentacles. Servos can be pretty power hungry, especially the chunky ones, so we've added some neat current monitoring functions so you can keep an eye on power consumption.
-
->We've used RP2040 as the core of this board because of the flexibility of its Programmable IOs (PIOs). Traditionally, each servo needs to be connected to its own PWM capable channel on the microcontroller. RP2040 only has 16 PWM channels, but it's possible to drive up to 30 servos using the magic of PIOs (if you're canny with wiring). RP2040's PIOs are also super fast, so they can drive servos with sub microsecond resolution.
-
-Keep in mind that the screw terminals for supplying external power (with reverse polarity protection) are rated for 10A max continuous current.
-
-### ***Battery Power Warning***:
-Although this application doesn't require it, the Servo 2040 can be powered by a 5V battery through the 5V/GND pins, instead of through the USB-C port. **When sourcing power through the 5V pins, it's important to _use a data-only USB adapter/cable_ to program the board.** This will prevent the 5V battery from backfeeding to the 5V source provided by the USB device.
-
-## Hexapod Robot Build
-## Servos
-The two most commonly recommended servos for this style of build are the [ZOSKAY 35kg coreless servos](https://www.amazon.com/dp/B07SBYZ4G5?_encoding=UTF8&ref_=cm_sw_r_cp_ud_dp_FHYWJWD1TXGTMJDHJMWC&th=1) [[Alternate Link]](https://www.aliexpress.us/item/2251832824472591.html?spm=a2g0o.order_detail.0.0.2e03f19c3p5o3j&gatewayAdapt=glo2usa4itemAdapt&_randl_shipto=US) and the [Feetech 35kg cored servos](https://www.robotshop.com/products/feetech-180-degrees-digital-servo-74v-35kg-cm-ft5330m). The reference hexapod chassis (linked below) is designed around the ZOSKAY servos.
-
-## 3D Printed Chassis
-All 3D printed designs, BOM, wiring guides, and build information for the reference hexapod can be found on Make Your Pet's [hexapod repository](https://github.com/MakeYourPet/hexapod).
+## Pimoroni servo2040
+Schematics and details from pimoroni:
+[Schematics](https://cdn.shopify.com/s/files/1/0174/1800/files/servo2040_schematic.pdf?v=1648817752)
+[Servo2040](https://shop.pimoroni.com/products/servo-2040?variant=39800591679571):
 
 # Software
-The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification, including the trailing framing byte appended to `GET` replies in this fork.
+The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification. This driver was originally made for the [MYP project](https://github.com/makeyourpet/hexapod). This is fork with minor changes to the original protocol.
 
 ## Features
 ### UART Host Link (GP20/GP21)
