@@ -30,9 +30,10 @@ WS2812 led_bar(servo2040::NUM_LEDS, pio1, 0, servo2040::LED_DATA);
 uint servoEnabled = false;
 
 /* Over-current trip state. While latched, SET RELAY 1 is refused; SET RELAY 0
- * clears the latch (an explicit disable always succeeds and re-arms). */
+ * clears the latch (an explicit disable always succeeds and re-arms). One
+ * dwell timer per tier — 0 means "currently below this tier's threshold". */
 static bool     overcurrent_tripped     = false;
-static uint64_t overcurrent_since_us    = 0;	// 0 = currently below threshold
+static uint64_t overcurrent_since_us[OVERCURRENT_TIER_COUNT] = {0};
 static uint64_t last_current_sample_us  = 0;
 
 int main()
@@ -146,7 +147,11 @@ static void apply_set(cmdPkt &p)
 			if (p.startIdx == RELAY)
 			{
 				// Explicit disable always wins and clears any latched trip.
-				if (!enableState) overcurrent_tripped = false;
+				if (!enableState && overcurrent_tripped)
+				{
+					overcurrent_tripped = false;
+					connectedVCP_ledSequence();
+				}
 				// Refuse re-enable while the trip is latched; leave A0 LOW.
 				if (overcurrent_tripped) continue;
 				servoEnabled = enableState;
@@ -294,6 +299,14 @@ void connectedVCP_ledSequence(void)
 	}
 }
 
+void fault_ledSequence(void)
+{
+	for (auto i = 0u; i < servo2040::NUM_LEDS; i++)
+	{
+		led_bar.set_hsv(i, 0.0f, 1.0f, BRIGHTNESS);
+	}
+}
+
 /*******************************************************************************
  * Safety Functions
  ******************************************************************************/
@@ -303,8 +316,10 @@ void overcurrent_check(void)
 	if (!servoEnabled)
 	{
 		// Cleared every time the cluster is disabled so that the next enable
-		// starts the debounce window from zero (avoids inrush carrying over).
-		overcurrent_since_us = 0;
+		// starts each tier's debounce window from zero (avoids inrush
+		// carrying over).
+		for (size_t k = 0; k < OVERCURRENT_TIER_COUNT; k++)
+			overcurrent_since_us[k] = 0;
 		return;
 	}
 
@@ -312,23 +327,30 @@ void overcurrent_check(void)
 	if (now - last_current_sample_us < OVERCURRENT_SAMPLE_US) return;
 	last_current_sample_us = now;
 
-	if (read_current() >= OVERCURRENT_THRESHOLD_A)
+	float i = read_current();
+	for (size_t k = 0; k < OVERCURRENT_TIER_COUNT; k++)
 	{
-		if (overcurrent_since_us == 0)
+		const OvercurrentTier& tier = OVERCURRENT_TIERS[k];
+		if (i >= tier.threshold_A)
 		{
-			overcurrent_since_us = now;
+			if (overcurrent_since_us[k] == 0)
+				overcurrent_since_us[k] = now;
+
+			// debounce_us == 0 trips on the same sample (instant cutoff).
+			if (now - overcurrent_since_us[k] >= tier.debounce_us)
+			{
+				overcurrent_tripped  = true;
+				servoEnabled         = false;
+				servos.disable_all();
+				gpio_put(A0_GPIO_PIN, 0);
+				fault_ledSequence();
+				return;
+			}
 		}
-		else if (now - overcurrent_since_us >= OVERCURRENT_DEBOUNCE_US)
+		else
 		{
-			overcurrent_tripped  = true;
-			servoEnabled         = false;
-			servos.disable_all();
-			gpio_put(A0_GPIO_PIN, 0);
+			overcurrent_since_us[k] = 0;
 		}
-	}
-	else
-	{
-		overcurrent_since_us = 0;
 	}
 }
 

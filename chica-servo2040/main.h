@@ -52,9 +52,25 @@ constexpr float b1024_3_3V_RATIO	= 310.3f;
 constexpr float b1024_5V_RATIO		= 204.8f;
 constexpr float CURR_LSb			= 0.0814f;
 
-/* Over-current trip */
-constexpr float    OVERCURRENT_THRESHOLD_A	= 10.0f;
-constexpr uint64_t OVERCURRENT_DEBOUNCE_US	= 1000000;
+/* Over-current trip. Tiered inverse-time protection sized for a 10 A
+ * continuous rail: higher current shortens the trip delay. Every tier is
+ * evaluated each sample and tracks its own dwell timer; the first whose
+ * dwell reaches its debounce wins. The top tier (debounce_us == 0) is an
+ * instant cutoff for dead-short events. */
+struct OvercurrentTier
+{
+	float    threshold_A;
+	uint64_t debounce_us;
+};
+
+constexpr OvercurrentTier OVERCURRENT_TIERS[] = {
+	{ 15.0f,       0 },	// 1.5x rated — instant cutoff
+	{ 12.0f,  200000 },	// 1.2x rated — 200 ms
+	{ 11.0f, 1000000 },	// 1.1x rated — 1 s sustained
+};
+constexpr size_t OVERCURRENT_TIER_COUNT =
+	sizeof(OVERCURRENT_TIERS) / sizeof(OVERCURRENT_TIERS[0]);
+
 constexpr uint64_t OVERCURRENT_SAMPLE_US	= 10000;
 
 /*******************************************************************************
@@ -142,6 +158,10 @@ void
 );
 
 void connectedVCP_ledSequence(
+void
+);
+
+void fault_ledSequence(
 void
 );
 

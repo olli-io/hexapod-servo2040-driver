@@ -49,7 +49,15 @@ The board can be powered via the pins labelled 5v and (-), or the usb connection
 **Recommended:** when running from a 2s lipo, use a [mini360 step down converter](https://www.google.com/search?q=mini+360+step+down+converter) set to 5V and connected to the aforementioned pins.
 
 ## Over-current Trip
-The firmware samples the bus current at a fixed interval and, if the current stays above a configured threshold for the full debounce window, it latches the servo enable off (disables all PWM outputs and de-asserts the relay). The defaults — `OVERCURRENT_THRESHOLD_A = 10.0` A, `OVERCURRENT_DEBOUNCE_US = 1 s`, `OVERCURRENT_SAMPLE_US = 10 ms` — are set in `chica-servo2040/main.h` and match the 10 A continuous rating of the screw terminal block. The host can re-enable the servos by re-asserting the relay once the fault condition is cleared.
+The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and runs each sample through a tiered inverse-time protection table — higher current shortens the trip delay. When any tier's dwell exceeds its debounce, the firmware latches the servo enable off (disables all PWM outputs and de-asserts the relay). Defaults in `chica-servo2040/main.h` are sized for the 10 A continuous rating of the screw terminal block:
+
+| Threshold | Debounce | Purpose                          |
+| --------- | -------- | -------------------------------- |
+| 15 A      | 0 ms     | Instant cutoff (dead short)      |
+| 12 A      | 200 ms   | Hard over-stress                 |
+| 11 A      | 1 s      | Sustained draw above rated load  |
+
+When a trip latches, the LED bar turns solid red. The host can re-enable the servos by toggling the relay off (which clears the latch and returns the bar to green) and then back on once the fault condition is cleared.
 
 ## Servo calibration utility
 Accurate servo positioning requires per-servo PWM calibration values, as demonstrated in MYP's [servo calibration video](https://www.youtube.com/watch?v=UMUeKFPptU4).
