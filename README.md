@@ -1,21 +1,29 @@
 # Uart Driver for the Pimoroni Servo 2040
+
+> [!WARNING]
+> **Work in progress** — This project is under active development. APIs,
+> configuration, and behavior may change without notice, and some features are
+> incomplete or untested. Use at your own risk. THERE ARE NO QUARANTEES THAT THE NEWEST COMMIT RUNS.
+
+> [!WARNING]
+> **BEWARE WHEN CONNECTING TO EXT. POWER OR BATTERY**:
+> When you are running servos with a higher voltage than 4V, you **need** to cut the 'Separate USB and Ext. Power' trace on the back of the board. Otherwise you may destroy the board itself or any device connected to the usb.
+
 This driver targets the [pimoroni servo 2040 board](https://shop.pimoroni.com/products/servo-2040?variant=39800591679571), a RP2040-based 18-channel servo controller, and exposes the servos and on-board sensors over a simple binary serial protocol so any host can drive them.
 
-> **This repository is a fork** of [EddieCarrera/chica-servo2040-simpleDriver](https://github.com/EddiaCarrera/chica-servo2040-simpleDriver). 
+**This repository is part of a multi-repo hexapod stack:**
+- ROS2 hexapod controller - ['olli-io/hexapod-ros2-control'](https://github.com/olli-io/hexapod-ros2-control)
+- Esp32 firmware to drive an oled screen - ['olli-io/hexapod-esp32-display'](https://github.com/olli-io/hexapod-esp32-display)
+
+> [!NOTE]
+> **This repository is a fork** of [EddieCarrera/chica-servo2039-simpleDriver](https://github.com/EddiaCarrera/chica-servo2040-simpleDriver). 
 > This driver was originally made for the [MYP project](https://github.com/makeyourpet/hexapod).
 
 > It diverges from the upstream firmware in three ways:
 > - The host link defaults to **USB-CDC** but can be built for **UART on GP20/GP21** (see [Host link options](#host-link-options)).
 > - The **GET reply is terminated with an MSB-set framing byte** so the host can resynchronize unambiguously.
 > - A **firmware-side over-current trip** drops the servo enable when the bus current exceeds a configurable threshold.
-
-> The full wire protocol used by this fork is documented in [`protocol.md`](protocol.md). 
-### ***External Power Warning***:
-**When you are running servos with a higher voltage than 5V, you need to _cut the 'Separate USB and Ext. Power' trace on the back of the board_ to prevent the RP2040 or _your machine_ being damaged by the increased voltage.**
-**The board is rated for 10A continuous power**
-### ***Battery Power Warning***:
-If the Servo 2040 can be powered by a 5V battery through the 5V/GND pins, instead of through the USB-C port. **When sourcing power through the 5V pins, it's important to _use a data-only USB adapter/cable_ to program the board.** This will prevent the 5V battery from backfeeding to the 5V source provided by the USB device. You can you a normal cable,
-but the 5V/GND pins must be removed prior to connecting the powered usb.
+> - The full wire protocol used by this fork is documented in [`protocol.md`](protocol.md). 
 
 ## Loading the Firmware Image
 To load the firmware onto the Servo 2040 board:
@@ -65,16 +73,4 @@ Accurate servo positioning requires per-servo PWM calibration values, as demonst
 To calibrate servos, load the included [servo calibration firmaware](servoCalibration.uf2) to the servo2040. This utility streamlines the PWM value acquisition process: a table is produced at the end of the program, which you can copy or screenshot for later use in your host configuration. A tutorial video for using `servoCalibration.uf2` can be found [here](https://youtu.be/w5ZRXiZLpTk).
 
 ## Communication protocol
-The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification. 
-
-## Dependencies
-This application is written in C++ for speed and performance.
-
-The [pico-SDK](https://github.com/raspberrypi/pico-sdk) and [pimoroni-pico](https://github.com/pimoroni/pimoroni-pico) are required libraries for Servo 2040 development. It's recommended to start by running a "hello world" example using pico-SDK, then slowly modifying CMake files and dependencies to migrate the pimoroni-pico library into your development environment (this is the tricky part!) and implementing the [C++ pimoroni servo2040 examples](https://github.com/pimoroni/pimoroni-pico/tree/main/examples/servo2040) one at a time.
-
-Development on the Servo 2040 can also be done using MicroPython, but this is outside the scope of this repository. A tutorial for setting up a MicroPython development environment can be found [here](https://github.com/pimoroni/pimoroni-pico/blob/main/setting-up-micropython.md).
-
-# Community & Feedback
-The upstream project is part of an active hexapod robotics community. If you would like to build your own hexapod and join the community, consider the [discord channel](https://discord.gg/vb8YWMfBuk) linked from the upstream repository.
-
-Bug reports, feature requests, and general feedback for this fork are welcome.
+The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification.
