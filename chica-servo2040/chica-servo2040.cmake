@@ -9,9 +9,9 @@ target_link_libraries(${OUTPUT_NAME}
         button
         )
 
-# Host link selection. USB-CDC is the default; pass `-DHOST_LINK=UART` to
-# cmake to build the UART-on-GP20/GP21 variant instead.
-set(HOST_LINK "USB" CACHE STRING "Host serial link: USB or UART")
+# Host link selection. UART-on-GP20/GP21 is the default; pass `-DHOST_LINK=USB`
+# to cmake to build the USB-CDC variant instead.
+set(HOST_LINK "UART" CACHE STRING "Host serial link: USB or UART")
 set_property(CACHE HOST_LINK PROPERTY STRINGS "USB" "UART")
 
 if(HOST_LINK STREQUAL "USB")
