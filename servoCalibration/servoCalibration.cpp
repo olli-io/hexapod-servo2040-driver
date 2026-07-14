@@ -124,7 +124,7 @@ int main() {
 					}
 				case KEY_RIGHT:
 					{
-						currPWM -= 10;
+						currPWM -= 5;
 						break;
 					}
 				case KEY_DOWN:
@@ -134,7 +134,7 @@ int main() {
 					}
 				case KEY_LEFT:
 					{
-						currPWM += 10;
+						currPWM += 5;
 						break;
 					}
 				default:
