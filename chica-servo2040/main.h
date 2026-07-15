@@ -16,23 +16,13 @@
 #define SET_CMD	0xD3 // 0x53 & 0x80
 #define GET_CMD	0xC7 // 0x47 & 0x80
 
-/* Relay control pins. Numbers come from hexapod_config.cmake as compile
- * definitions; the fallbacks keep this header self-contained if built without
- * that config. A0 is the primary relay line (host index RELAY). GP27/GP28 are
- * reserved as alternative relay lines for future use — held low at init and not
- * yet exposed on the host protocol. */
+/* Relay control pin. The number comes from hexapod_config.cmake as a compile
+ * definition; the fallback keeps this header self-contained if built without
+ * that config. A0 is the primary relay line (host index RELAY). */
 #ifndef A0_GPIO_PIN
 #define A0_GPIO_PIN				26
 #endif
-#ifndef RELAY_ALT1_GPIO_PIN
-#define RELAY_ALT1_GPIO_PIN		27
-#endif
-#ifndef RELAY_ALT2_GPIO_PIN
-#define RELAY_ALT2_GPIO_PIN		28
-#endif
 #define A0_GPIO_MASK			(1<<A0_GPIO_PIN)
-#define RELAY_ALT1_GPIO_MASK	(1<<RELAY_ALT1_GPIO_PIN)
-#define RELAY_ALT2_GPIO_MASK	(1<<RELAY_ALT2_GPIO_PIN)
 #define GPIO_OUTPUT_MASK	0xFFFFFFFF
 #define GPIO_INPUT_MASK		0x00
 #define GPIO_HIGH_MASK		0xFFFFFFFF

@@ -23,14 +23,13 @@ set_property(CACHE HOST_LINK PROPERTY STRINGS "USB" "UART")
 set(HEXAPOD_UART_INSTANCE 1  CACHE STRING "RP2040 UART instance used for stdio")
 set(HEXAPOD_UART_TX_PIN   20 CACHE STRING "stdio UART TX GPIO - labelled SDA on Servo2040")
 set(HEXAPOD_UART_RX_PIN   21 CACHE STRING "stdio UART RX GPIO - labelled SCL on Servo2040")
+# 460800 keeps 200 Hz SET+GET well inside the link budget; the SDK default is
+# only 115200. Must match the host's serial baud rate.
+set(HEXAPOD_UART_BAUD 460800 CACHE STRING "stdio UART baud rate")
 
 # ---- Relay control pins -----------------------------------------------------
 # A0 doubles as the primary RELAY control line, so RELAY and A0 share one pin.
-# GP27/GP28 are reserved as alternative relay control lines for future use; they
-# are held low at init and are not yet exposed on the host protocol.
 set(HEXAPOD_RELAY_PIN      26 CACHE STRING "Primary relay / A0 control GPIO")
-set(HEXAPOD_RELAY_ALT1_PIN 27 CACHE STRING "Reserved alternative relay GPIO")
-set(HEXAPOD_RELAY_ALT2_PIN 28 CACHE STRING "Reserved alternative relay GPIO")
 
 # hexapod_apply_config(<target> [LINK <USB|UART>])
 #
@@ -48,8 +47,6 @@ function(hexapod_apply_config target)
   target_compile_definitions(${target} PRIVATE
     RELAY_GPIO_PIN=${HEXAPOD_RELAY_PIN}
     A0_GPIO_PIN=${HEXAPOD_RELAY_PIN}
-    RELAY_ALT1_GPIO_PIN=${HEXAPOD_RELAY_ALT1_PIN}
-    RELAY_ALT2_GPIO_PIN=${HEXAPOD_RELAY_ALT2_PIN}
   )
 
   if(link STREQUAL "USB")
@@ -64,6 +61,7 @@ function(hexapod_apply_config target)
       PICO_DEFAULT_UART=${HEXAPOD_UART_INSTANCE}
       PICO_DEFAULT_UART_TX_PIN=${HEXAPOD_UART_TX_PIN}
       PICO_DEFAULT_UART_RX_PIN=${HEXAPOD_UART_RX_PIN}
+      PICO_DEFAULT_UART_BAUD_RATE=${HEXAPOD_UART_BAUD}
     )
   else()
     message(FATAL_ERROR "HOST_LINK must be USB or UART (got '${link}')")

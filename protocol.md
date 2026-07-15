@@ -75,9 +75,8 @@ a servo channel, an ADC-mux channel address, or a real pin:
 | 25    | `VOLT`             | Voltage in A/100  | ADC-mux channel           | `0b110` (6) |
 | 26    | `RELAY`            | Default relay pin | RP2040 GPIO               | GP26 (`A0_GPIO_PIN`) |
 
-Host indexes stop at `26`. GP27/GP28 (formerly `A1`/`A2`) are **reserved as
-alternative relay control lines** for future use — initialised low, and **not
-currently addressable** over the protocol.
+Host indexes stop at `26`. GP27/GP28 (formerly `A1`/`A2`) are **not used** by the
+firmware and **not addressable** over the protocol.
 
 Indices 18–25 are **mux channel addresses, not pins**: the 3-bit address drives
 the select lines `ADC_ADDR_0/1/2` = GP22/GP24/GP25, routing one sensor onto the

@@ -50,13 +50,10 @@ int main()
 		mux.configure_pulls(servo2040::SENSOR_1_ADDR + i, false, true);
 	}
 
-	/* Initialize the primary relay line (A0) and the two reserved alternative
-	 * relay lines as outputs held low. */
-	gpio_init_mask(A0_GPIO_MASK | RELAY_ALT1_GPIO_MASK | RELAY_ALT2_GPIO_MASK);
-	gpio_set_dir_masked(A0_GPIO_MASK | RELAY_ALT1_GPIO_MASK | RELAY_ALT2_GPIO_MASK,
-						GPIO_OUTPUT_MASK); // Set output
-	gpio_put_masked(A0_GPIO_MASK | RELAY_ALT1_GPIO_MASK | RELAY_ALT2_GPIO_MASK,
-					GPIO_LOW_MASK); // Set LOW
+	/* Initialize the primary relay line (A0) as an output held low. */
+	gpio_init_mask(A0_GPIO_MASK);
+	gpio_set_dir_masked(A0_GPIO_MASK, GPIO_OUTPUT_MASK); // Set output
+	gpio_put_masked(A0_GPIO_MASK, GPIO_LOW_MASK); // Set LOW
 
 	stdio_init_all();
 	led_bar.start();
