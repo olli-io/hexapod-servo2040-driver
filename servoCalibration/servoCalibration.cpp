@@ -188,7 +188,7 @@ int main() {
     sleep_ms(250); // Give each servo time to center to avoid
   } // drawing too much current at once
   printf(" Done, all servos at calibrated center\r\n"
-         " Visually verify that all servos are exactly centered \r\n"
+         " Visually verify that all servos are exactly centered \r\n   "
          " If not, calibration process should be repeated \r\n");
   printf(" ********************************************************************"
          "**\r\n\r\n");

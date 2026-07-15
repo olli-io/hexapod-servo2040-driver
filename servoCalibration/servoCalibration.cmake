@@ -9,8 +9,8 @@ target_link_libraries(${OUTPUT_NAME}
         button
         )
 
-# enable usb output, disable uart output (so it doesn't confuse any connected servos)
-pico_enable_stdio_usb(${OUTPUT_NAME} 1)
-pico_enable_stdio_uart(${OUTPUT_NAME} 0)
+# Force the USB link (disable UART) so calibration output doesn't confuse any
+# connected servos. Pin numbers still come from hexapod_config.cmake.
+hexapod_apply_config(${OUTPUT_NAME} LINK USB)
 
 pico_add_extra_outputs(${OUTPUT_NAME})

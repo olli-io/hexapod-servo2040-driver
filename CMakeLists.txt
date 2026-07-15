@@ -10,6 +10,10 @@ set(CMAKE_CXX_STANDARD 17)
 # Initialize the SDK
 pico_sdk_init()
 
+# Shared board configuration (host link, UART pins, GPIO pins). Provides the
+# hexapod_apply_config() helper used by the firmware targets below.
+include(hexapod_config.cmake)
+
 function(add_resource target file)
   get_filename_component(NAME ${ARGV1} NAME_WE)
   set(FILENAME ${ARGV1})

@@ -15,10 +15,18 @@
 #define SET_CMD	0xD3 // 0x53 & 0x80
 #define GET_CMD	0xC7 // 0x47 & 0x80
 
-/* A0/A1/A2 Mapping */
+/* A0/A1/A2 Mapping. Pin numbers come from hexapod_config.cmake as compile
+ * definitions; the fallbacks keep this header self-contained if built without
+ * that config. */
+#ifndef A0_GPIO_PIN
 #define A0_GPIO_PIN			26
+#endif
+#ifndef A1_GPIO_PIN
 #define A1_GPIO_PIN			27
+#endif
+#ifndef A2_GPIO_PIN
 #define A2_GPIO_PIN			28
+#endif
 #define A0_GPIO_MASK		(1<<A0_GPIO_PIN)
 #define A1_GPIO_MASK		(1<<A1_GPIO_PIN)
 #define A3_GPIO_MASK		(1<<A2_GPIO_PIN)
