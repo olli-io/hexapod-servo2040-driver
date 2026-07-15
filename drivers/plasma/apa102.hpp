@@ -14,7 +14,9 @@ found here: https://github.com/raspberrypi/pico-examples/tree/master/pio/apa102
 #include <math.h>
 #include <cstdint>
 
+#ifndef NO_QSTR
 #include "apa102.pio.h"
+#endif
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
@@ -74,6 +76,7 @@ namespace plasma {
             bool start(uint fps=60);
             bool stop();
             void update(bool blocking=false);
+            bool is_busy();
             void clear();
             void set_hsv(uint32_t index, float h, float s, float v);
             void set_rgb(uint32_t index, uint8_t r, uint8_t g, uint8_t b, bool gamma=true);

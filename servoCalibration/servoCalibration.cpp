@@ -6,6 +6,7 @@
 
 #include "pico/stdlib.h"
 #include "servo2040.hpp"
+#include <cmath>
 #include <stdio.h>
 
 using namespace servo;
@@ -61,7 +62,7 @@ int main() {
          " Welcome to the rp2040 calibration script!\r\n\r\n"
 
          " This script will record and return the PWM values at \r\n"
-         " -45 and +45 degrees for each servo. It will also return \r\n" v
+         " -45 and +45 degrees for each servo. It will also return \r\n"
          " the average PWM of the values at the end of the script for \r\n"
          " calibration purposes.\r\n\r\n");
 
@@ -175,7 +176,7 @@ int main() {
 
   /* Take the center PWM value for each servo */
   for (auto currServo = START_PIN; currServo < NUM_SERVOS; currServo++) {
-    center_PWMvalues[currServo] = round(
+    center_PWMvalues[currServo] = std::round(
         (float(neg45_PWMvalues[currServo] + pos45_PWMvalues[currServo]) / 2));
   }
   printf(" ********************************************************************"

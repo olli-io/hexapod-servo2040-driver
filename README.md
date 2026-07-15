@@ -74,3 +74,5 @@ To calibrate servos, load the included [servo calibration firmaware](servoCalibr
 
 ## Communication protocol
 The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification.
+
+Battery telemetry (`GET` on the CURR/VOLT indices) replies in fixed-point **centi-units** — the wire count is `round(value * 100)`, so `0.01 A`/`0.01 V` per count. The host recovers engineering units with a single multiply by `0.01` and carries no per-board scaling; the relay pin is board-owned. Touch-sensor `GET`s remain raw ADC-derived codes and are not consumed by the host. See [`protocol.md`](protocol.md) for the unit definition and a worked example.

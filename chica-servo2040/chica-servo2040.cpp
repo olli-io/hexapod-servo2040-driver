@@ -50,11 +50,12 @@ int main()
 		mux.configure_pulls(servo2040::SENSOR_1_ADDR + i, false, true);
 	}
 
-	/* Initialize A0,A1,A2 */
-	gpio_init_mask(A0_GPIO_MASK | A1_GPIO_MASK | A3_GPIO_MASK);
-	gpio_set_dir_masked(A0_GPIO_MASK | A1_GPIO_MASK | A3_GPIO_MASK,
+	/* Initialize the primary relay line (A0) and the two reserved alternative
+	 * relay lines as outputs held low. */
+	gpio_init_mask(A0_GPIO_MASK | RELAY_ALT1_GPIO_MASK | RELAY_ALT2_GPIO_MASK);
+	gpio_set_dir_masked(A0_GPIO_MASK | RELAY_ALT1_GPIO_MASK | RELAY_ALT2_GPIO_MASK,
 						GPIO_OUTPUT_MASK); // Set output
-	gpio_put_masked(A0_GPIO_MASK | A1_GPIO_MASK | A3_GPIO_MASK,
+	gpio_put_masked(A0_GPIO_MASK | RELAY_ALT1_GPIO_MASK | RELAY_ALT2_GPIO_MASK,
 					GPIO_LOW_MASK); // Set LOW
 
 	stdio_init_all();
@@ -163,6 +164,18 @@ static void apply_set(cmdPkt &p)
 	}
 }
 
+// Encode a battery telemetry reading (volts or amps) into an unsigned wire
+// count of fixed centi-units, clamped to the 14-bit range. read_voltage()/
+// read_current() are already non-negative, so only the upper clamp bites (a
+// fault-current spike saturates rather than wrapping).
+static uint telemetry_counts(float value)
+{
+	long c = std::lround(value * TELEMETRY_COUNTS_PER_UNIT);
+	if (c < 0) c = 0;
+	if (c > (long)TELEMETRY_COUNT_MAX) c = TELEMETRY_COUNT_MAX;
+	return (uint)c;
+}
+
 static uint sample_pin(uint startIdx)
 {
 	if (startIdx <= SERVO18)
@@ -172,15 +185,15 @@ static uint sample_pin(uint startIdx)
 	if (startIdx <= TS6)
 	{
 		float v = read_analogPin(cmdPin_to_hardwarePin((cmdPins)startIdx));
-		return (uint)round(v * b1024_3_3V_RATIO);
+		return (uint)std::round(v * b1024_3_3V_RATIO);
 	}
 	if (startIdx == CURR)
 	{
-		return (uint)round(read_current() / CURR_LSb) + 512;
+		return telemetry_counts(read_current());
 	}
 	if (startIdx == VOLT)
 	{
-		return (uint)round(read_voltage() * b1024_3_3V_RATIO);
+		return telemetry_counts(read_voltage());
 	}
 	return 0; // unreachable post-validation
 }

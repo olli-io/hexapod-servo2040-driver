@@ -24,6 +24,7 @@ namespace pimoroni {
   public:
     static const uint BUFFER_SIZE = 64;     // Set to 64, the maximum number of single rises and falls for 32 channels within a looping time period
     static const uint NUM_BUFFERS = 3;
+    static const uint MAX_PWM_CHANNELS = 32;
 
 
     //--------------------------------------------------
@@ -102,9 +103,9 @@ namespace pimoroni {
     PIO pio;
     uint sm;
     int dma_channel;
-    uint pin_mask;
+    uint64_t pin_mask;
     uint8_t channel_count;
-    ChannelState* channels;
+    ChannelState channels[NUM_BANK0_GPIOS];
     uint8_t channel_to_pin_map[NUM_BANK0_GPIOS];
     uint wrap_level;
 
@@ -134,7 +135,7 @@ namespace pimoroni {
     // Constructors/Destructor
     //--------------------------------------------------
   public:
-    PWMCluster(PIO pio, uint sm, uint pin_mask, bool loading_zone = DEFAULT_USE_LOADING_ZONE);
+    PWMCluster(PIO pio, uint sm, uint64_t pin_mask, bool loading_zone = DEFAULT_USE_LOADING_ZONE);
     PWMCluster(PIO pio, uint sm, uint pin_base, uint pin_count, bool loading_zone = DEFAULT_USE_LOADING_ZONE);
     PWMCluster(PIO pio, uint sm, const uint8_t *pins, uint32_t length, bool loading_zone = DEFAULT_USE_LOADING_ZONE);
     PWMCluster(PIO pio, uint sm, std::initializer_list<uint8_t> pins, bool loading_zone = DEFAULT_USE_LOADING_ZONE);

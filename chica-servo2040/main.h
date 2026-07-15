@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdio.h>
+#include <cmath>
 #include <cstring>
 #include "pico/stdlib.h"
 #include "servo2040.hpp"
@@ -15,21 +16,23 @@
 #define SET_CMD	0xD3 // 0x53 & 0x80
 #define GET_CMD	0xC7 // 0x47 & 0x80
 
-/* A0/A1/A2 Mapping. Pin numbers come from hexapod_config.cmake as compile
+/* Relay control pins. Numbers come from hexapod_config.cmake as compile
  * definitions; the fallbacks keep this header self-contained if built without
- * that config. */
+ * that config. A0 is the primary relay line (host index RELAY). GP27/GP28 are
+ * reserved as alternative relay lines for future use — held low at init and not
+ * yet exposed on the host protocol. */
 #ifndef A0_GPIO_PIN
-#define A0_GPIO_PIN			26
+#define A0_GPIO_PIN				26
 #endif
-#ifndef A1_GPIO_PIN
-#define A1_GPIO_PIN			27
+#ifndef RELAY_ALT1_GPIO_PIN
+#define RELAY_ALT1_GPIO_PIN		27
 #endif
-#ifndef A2_GPIO_PIN
-#define A2_GPIO_PIN			28
+#ifndef RELAY_ALT2_GPIO_PIN
+#define RELAY_ALT2_GPIO_PIN		28
 #endif
-#define A0_GPIO_MASK		(1<<A0_GPIO_PIN)
-#define A1_GPIO_MASK		(1<<A1_GPIO_PIN)
-#define A3_GPIO_MASK		(1<<A2_GPIO_PIN)
+#define A0_GPIO_MASK			(1<<A0_GPIO_PIN)
+#define RELAY_ALT1_GPIO_MASK	(1<<RELAY_ALT1_GPIO_PIN)
+#define RELAY_ALT2_GPIO_MASK	(1<<RELAY_ALT2_GPIO_PIN)
 #define GPIO_OUTPUT_MASK	0xFFFFFFFF
 #define GPIO_INPUT_MASK		0x00
 #define GPIO_HIGH_MASK		0xFFFFFFFF
@@ -56,9 +59,16 @@ constexpr uint32_t IDLE_POLL_TIMEOUT_US		= 0;
 constexpr float BRIGHTNESS		= 0.3f;		// Normalized
 
 /* Ratios */
-constexpr float b1024_3_3V_RATIO	= 310.3f;
-constexpr float b1024_5V_RATIO		= 204.8f;
-constexpr float CURR_LSb			= 0.0814f;
+constexpr float b1024_3_3V_RATIO	= 310.3f;	// touch-sensor GET code (raw ADC)
+
+/* Battery telemetry wire units. VOLT/CURR GET replies carry fixed-point
+ * centi-units: wire count = round(engineering_value * 100), i.e. 0.01 V or
+ * 0.01 A per count. Protocol-defined — the host multiplies by the reciprocal
+ * (0.01) and carries no other scaling. Unsigned, clamped to the 14-bit max so
+ * a fault-current spike saturates rather than wrapping. Must match the host
+ * constant (kVoltsPerCount/kAmpsPerCount in servo2040_protocol.hpp). */
+constexpr float TELEMETRY_COUNTS_PER_UNIT	= 100.0f;
+constexpr uint  TELEMETRY_COUNT_MAX			= 16383;
 
 /* Over-current trip. Tiered inverse-time protection sized for a 10 A
  * continuous rail: higher current shortens the trip delay. Every tier is
@@ -89,7 +99,7 @@ typedef enum {
 	SERVO7, SERVO8, SERVO9, SERVO10, SERVO11, SERVO12, 
 	SERVO13, SERVO14, SERVO15, SERVO16, SERVO17, SERVO18,
 	TS1, TS2, TS3, TS4, TS5, TS6, 
-	CURR, VOLT, RELAY, A1, A2, cmdPin_num
+	CURR, VOLT, RELAY, cmdPin_num
 } cmdPins;
 
 typedef enum {
@@ -126,9 +136,7 @@ constexpr uint RP_hardwarePins_table[] =
 	servo::servo2040::SENSOR_6_ADDR,		// TS_R3
 	servo::servo2040::CURRENT_SENSE_ADDR,	// CURR
 	servo::servo2040::VOLTAGE_SENSE_ADDR,	// VOLT
-	A0_GPIO_PIN,							// RELAY
-	A1_GPIO_PIN,							// A1
-	A2_GPIO_PIN								// A2
+	A0_GPIO_PIN								// RELAY
 };
 
 /*******************************************************************************

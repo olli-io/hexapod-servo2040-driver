@@ -34,7 +34,7 @@ Note #2: The optimal case is when all the servos are set to consecutive pins, an
 
 ## GET command
 
-Sent by the phone to get the value of a pin or a sequence of pins, which can be a servo pulse width for a servo pin, or a sensor input such as voltage, current or the touch sensors.
+Sent by the host to get the value of a pin or a sequence of pins, which can be a servo pulse width for a servo pin, or a sensor input such as voltage, current or the touch sensors.
 
 Phone sends:
 
@@ -59,6 +59,70 @@ Example #2: get the value on pins 20 to 25
 ```
 [G][20][6]
 ```
+
+## Protocol pin index map (host index → board hardware)
+
+The host addresses a **flat logical pin index** (`0`–`26`), not a GPIO. The
+firmware reassigns each index via `RP_hardwarePins_table` in
+`chica-servo2040/main.h`. **The resolved value is not always a GPIO** — it may be
+a servo channel, an ADC-mux channel address, or a real pin:
+
+| Index | Name               | Description       | Resolves to               | Address / pin |
+| ----- | ------------------ | ----------------- | ------------------------- | :-----------------: |
+| 0–17  | `SERVO1`–`SERVO18` | Servos            | PIO servo-cluster channel | channel `0`–`17` (GP0–GP17) |
+| 18–23 | `TS1`–`TS6`        | Touch sensors     | ADC-mux channel           | `0b000`–`0b101` (0–5) |
+| 24    | `CURR`             | Current in V/100  | ADC-mux channel           | `0b111` (7) |
+| 25    | `VOLT`             | Voltage in A/100  | ADC-mux channel           | `0b110` (6) |
+| 26    | `RELAY`            | Default relay pin | RP2040 GPIO               | GP26 (`A0_GPIO_PIN`) |
+
+Host indexes stop at `26`. GP27/GP28 (formerly `A1`/`A2`) are **reserved as
+alternative relay control lines** for future use — initialised low, and **not
+currently addressable** over the protocol.
+
+Indices 18–25 are **mux channel addresses, not pins**: the 3-bit address drives
+the select lines `ADC_ADDR_0/1/2` = GP22/GP24/GP25, routing one sensor onto the
+shared ADC input `SHARED_ADC` = GP29.
+
+The analog/digital split falls at the top of the map: **24/25 (`CURR`/`VOLT`) go
+to the multiplexer**, and **26 (`RELAY`) is the only GPIO index**. The relay GPIO
+(`A0`, default GP26, from `hexapod_config.cmake`) does not affect `CURR`/`VOLT`,
+which are mux channel addresses.
+
+## Telemetry units (voltage / current)
+
+The bus current and voltage sensors are read via `GET` on the fixed indices
+`CURR = 24` and `VOLT = 25` (these are consecutive, so one `GET [24][2]` returns
+both). Their reply values are **not** raw ADC codes: the firmware has already
+applied the on-board divider and shunt and reports fixed-point **centi-units** —
+
+```
+wire_count = round(engineering_value * 100)   // 0.01 A or 0.01 V per count
+```
+
+The values are unsigned and clamped to the 14-bit maximum (16383), i.e. a full
+scale of 163.83 A / 163.83 V, so a fault-current spike saturates rather than
+wrapping. The host recovers engineering units with a single multiply by the
+reciprocal `0.01` and carries **no** other scaling. This factor is
+protocol-defined and must match on both ends (firmware `TELEMETRY_COUNTS_PER_UNIT`,
+host `kVoltsPerCount`/`kAmpsPerCount`).
+
+Worked example — read both, current `1.50 A`, voltage `8.30 V`:
+
+```
+Request:  C7 18 02                     GET(start=24, count=2)
+Reply:    C7 18 02 16 01 3E 06 F2
+          └cmd  │  │  └─── └─── └── checksum (XOR of prior bytes) | 0x80
+          start=24 (0x18), count=2 (0x02)
+          current = 0x16 | (0x01<<7) = 150  →  150 * 0.01 = 1.50 A   (values[0])
+          voltage = 0x3E | (0x06<<7) = 830  →  830 * 0.01 = 8.30 V   (values[1])
+```
+
+Ordering is current-then-voltage because `CURR` (24) precedes `VOLT` (25) on the
+wire. The relay is addressed by `SET` on index `RELAY = 26`, whose GPIO is chosen
+entirely on the board — the host never configures a relay pin.
+
+Note: touch-sensor `GET`s (indices 18..23) still reply with a raw ADC-derived code
+(a different, ~10-bit scaling) and are not consumed by the host.
 
 ## Command bytes vs. Value bytes
 
