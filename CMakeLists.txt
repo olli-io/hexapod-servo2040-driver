@@ -34,12 +34,13 @@ endfunction(add_resource)
 
 include_directories(
   ${CMAKE_CURRENT_LIST_DIR}
+  ${CMAKE_CURRENT_LIST_DIR}/src
+  ${CMAKE_CURRENT_LIST_DIR}/vendor
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror")
 
-add_subdirectory(common)
-add_subdirectory(drivers)
-add_subdirectory(libraries)
-add_subdirectory(servoCalibration)
-add_subdirectory(chica-servo2040)
+add_subdirectory(vendor/drivers)
+add_subdirectory(vendor/libraries)
+add_subdirectory(src/servoCalibration)
+add_subdirectory(src/chica-servo2040)

@@ -64,7 +64,7 @@ Example #2: get the value on pins 20 to 25
 
 The host addresses a **flat logical pin index** (`0`–`26`), not a GPIO. The
 firmware reassigns each index via `RP_hardwarePins_table` in
-`chica-servo2040/main.h`. **The resolved value is not always a GPIO** — it may be
+`src/chica-servo2040/main.h`. **The resolved value is not always a GPIO** — it may be
 a servo channel, an ADC-mux channel address, or a real pin:
 
 | Index | Name               | Description       | Resolves to               | Address / pin |
