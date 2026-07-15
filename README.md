@@ -74,7 +74,9 @@ When a trip latches, the LED bar turns solid red. The host can re-enable the ser
 ## Servo calibration utility
 Accurate servo positioning requires per-servo PWM calibration values, as demonstrated in MYP's [servo calibration video](https://www.youtube.com/watch?v=UMUeKFPptU4).
 
-To calibrate servos, load the included [servo calibration firmaware](dist/servoCalibration.uf2) to the servo2040. This utility streamlines the PWM value acquisition process: a table is produced at the end of the program, which you can copy or screenshot for later use in your host configuration. A tutorial video for using `servoCalibration.uf2` can be found [here](https://youtu.be/w5ZRXiZLpTk).
+To calibrate servos, load the included [servo calibration firmware](dist/servoCalibration.uf2) to the servo2040. This utility streamlines the PWM value acquisition process: a table is produced at the end of the program, which you can copy or screenshot for later use in your host configuration. A tutorial video for using `servoCalibration.uf2` can be found [here](https://youtu.be/w5ZRXiZLpTk).
+
+See [`src/servoCalibration/README.md`](src/servoCalibration/README.md) for step-by-step calibration instructions.
 
 ## Communication protocol
 The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification.
