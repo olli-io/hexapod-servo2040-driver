@@ -74,9 +74,12 @@ a servo channel, an ADC-mux channel address, or a real pin:
 | 24    | `CURR`             | Current in V/100  | ADC-mux channel           | `0b111` (7) |
 | 25    | `VOLT`             | Voltage in A/100  | ADC-mux channel           | `0b110` (6) |
 | 26    | `RELAY`            | Default relay pin | RP2040 GPIO               | GP26 (`A0_GPIO_PIN`) |
+| 27    | `STATUS`           | Latched fault reg | firmware state (no pin)   |         —          |
 
-Host indexes stop at `26`. GP27/GP28 (formerly `A1`/`A2`) are **not used** by the
-firmware and **not addressable** over the protocol.
+Host indexes stop at `27`. Index `27` (`STATUS`) resolves to firmware state, not
+a GPIO or mux channel — it is a read-only fault register (see below). GP28
+(formerly `A2`) is **not used** by the firmware and **not addressable** over the
+protocol.
 
 Indices 18–25 are **mux channel addresses, not pins**: the 3-bit address drives
 the select lines `ADC_ADDR_0/1/2` = GP22/GP24/GP25, routing one sensor onto the
@@ -122,6 +125,92 @@ entirely on the board — the host never configures a relay pin.
 
 Note: touch-sensor `GET`s (indices 18..23) still reply with a raw ADC-derived code
 (a different, ~10-bit scaling) and are not consumed by the host.
+
+## Fault / status register (`STATUS = 27`)
+
+The firmware runs an autonomous over-current protection: if the rail
+draws too much for too long it **latches a fault**, disables the servo cluster,
+drops the relay, and shows a red LED — all without host involvement. Because the
+protocol is strictly polled (the board only ever replies to a `GET`; `SET` is
+silent), the host learns about this by polling the read-only `STATUS` register at
+index `27`. `STATUS` reflects firmware state, has no pin, and is **read-only**:
+any `SET` overlapping index 27 is rejected (as is a range that straddles it, e.g.
+`SET [26][2]` — write `RELAY` alone with `SET [26][1]`).
+
+`GET [27][1]` returns a 14-bit fault word, LSB-first. **`0` means clean** (no
+fault); non-zero means a fault is latched:
+
+| Bits  | Field          | Meaning                                                         |
+| ----- | -------------- | --------------------------------------------------------------- |
+| 0     | `TRIPPED`      | 1 = over-current latch active (definitive flag)                 |
+| 1–10  | `TRIP_CURRENT` | current at the trip, `0.1 A`/count, 0–102.3 A (saturates)       |
+| 11–13 | —              | reserved (0)                                                    |
+
+Decode:
+
+```
+tripped   =  value        & 0x1
+trip_amps = ((value >> 1)  & 0x3FF) * 0.1
+```
+
+The word is **sticky**: it keeps reporting the trip on every poll — no matter how
+slowly the host polls — until the host clears it by sending `SET RELAY 0` (the
+same disable line). That clears the latch and re-arms; a subsequent `SET RELAY 1`
+re-enables (subject to the staged-pose requirement below) and `STATUS` reads `0`
+again. Live current reads ~0 once the relay is open, which is why the current *at
+the trip* is captured in the word rather than read back afterwards.
+
+Recommended host handling: on a non-zero `STATUS`, stop issuing servo `SET`s,
+surface the fault (trip current) to the operator, then recover with
+`SET RELAY 0` → stage a fresh pose (servo `SET`s) → `SET RELAY 1`. The board does
+**not** resume the pre-trip positions — the pose that drew the fault current is
+never re-applied automatically (see below).
+
+### Enabling servos: the staged-pose requirement
+
+The board **never drives a servo to a position the host has not commanded** —
+there is no power-on "center to midpoint" behaviour. The first position a servo
+assumes is always one the host has sent. This applies identically at cold startup
+and after an over-current recovery.
+
+Mechanically, a servo `SET` sent while the relay is **off** (disabled) is
+*staged*: the pulse is buffered in the PWM registers but not driven. `SET RELAY 1`
+then latches whatever is staged. Consequences for the host:
+
+- **`SET RELAY 1` is ignored** (the relay stays open, no servos move) **until at
+  least one servo position has been staged since the last disable.** An enable
+  with nothing staged is a silent no-op — the board is polled, so the host
+  confirms success by observing servo response, not an ack.
+- A **disable resets the requirement**: both `SET RELAY 0` and an over-current
+  trip clear the staged-pose flag, so a fresh pose must be staged before the next
+  enable. This is why recovery is `SET RELAY 0` → stage pose → `SET RELAY 1`.
+- Only staged servos are driven on enable; any servo left un-commanded stays limp
+  (no pulse), never a midpoint.
+
+Recommended bring-up (startup **and** recovery):
+
+```
+SET <servos> <pose>      # stage a full pose while the relay is off
+SET RELAY 1              # latches the staged pose atomically; legs snap to it
+... stream SET <servos> ...   # subsequent SETs drive immediately
+```
+
+### Reading telemetry and status in one frame
+
+`STATUS` (27) sits one past the telemetry block, so a single `GET [24][4]` reads
+`CURR`, `VOLT`, `RELAY`, `STATUS` together. `RELAY` (26) has no sensor and reads
+back a defined `0`.
+
+```
+Request:  C7 18 04                             GET(start=24, count=4)
+Reply:    C7 18 04 16 01 3E 06 00 00 00 00 XX
+          └cmd  │  │  └CURR └VOLT └RELAY └STATUS └ checksum (XOR prior) | 0x80
+          start=24 (0x18), count=4 (0x04)
+          current = 0x16 | (0x01<<7) = 150  →  1.50 A   (values[0])
+          voltage = 0x3E | (0x06<<7) = 830  →  8.30 V   (values[1])
+          relay   = 0x00 | (0x00<<7) = 0                (values[2], always 0)
+          status  = 0x00 | (0x00<<7) = 0    →  no fault (values[3])
+```
 
 ## Command bytes vs. Value bytes
 

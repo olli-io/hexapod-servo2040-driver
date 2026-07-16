@@ -81,15 +81,33 @@ constexpr size_t OVERCURRENT_TIER_COUNT =
 
 constexpr uint64_t OVERCURRENT_SAMPLE_US	= 10000;
 
+/* STATUS (host index 27) latched fault word — 14-bit, LSB-first, read-only over
+ * GET. Zero == clean (no fault). Bit 0: over-current latch active. Bits 1..3:
+ * which OVERCURRENT_TIERS entry fired (valid only when bit 0 set). Bits 4..13:
+ * current at the latching sample in 0.1 A counts (saturates at 102.3 A). Live
+ * current reads ~0 after the relay drops, so the trip value is captured here.
+ * The host clears the latch with SET RELAY 0. Word max 0x3FFF fits the 14-bit
+ * wire value and splits into two MSB-clear bytes. */
+#define STATUS_TRIPPED_BIT		0
+#define STATUS_TRIPPED_MASK		(1u << STATUS_TRIPPED_BIT)		// bit 0
+#define STATUS_TIER_SHIFT		1
+#define STATUS_TIER_MASK		(0x7u << STATUS_TIER_SHIFT)		// bits 1..3
+#define STATUS_CURRENT_SHIFT	4
+#define STATUS_CURRENT_MASK		(0x3FFu << STATUS_CURRENT_SHIFT)	// bits 4..13
+constexpr float STATUS_CURRENT_COUNTS_PER_A	= 10.0f;	// 0.1 A per count
+constexpr uint  STATUS_CURRENT_COUNT_MAX	= 0x3FF;	// 1023 -> 102.3 A
+
+static_assert(OVERCURRENT_TIER_COUNT <= 8, "STATUS TIER field is only 3 bits");
+
 /*******************************************************************************
  * Enumerations
  ******************************************************************************/
 typedef enum {
-	SERVO1, SERVO2, SERVO3, SERVO4, SERVO5, SERVO6, 
-	SERVO7, SERVO8, SERVO9, SERVO10, SERVO11, SERVO12, 
+	SERVO1, SERVO2, SERVO3, SERVO4, SERVO5, SERVO6,
+	SERVO7, SERVO8, SERVO9, SERVO10, SERVO11, SERVO12,
 	SERVO13, SERVO14, SERVO15, SERVO16, SERVO17, SERVO18,
-	TS1, TS2, TS3, TS4, TS5, TS6, 
-	CURR, VOLT, RELAY, cmdPin_num
+	TS1, TS2, TS3, TS4, TS5, TS6,
+	CURR, VOLT, RELAY, STATUS, cmdPin_num
 } cmdPins;
 
 typedef enum {
@@ -126,8 +144,14 @@ constexpr uint RP_hardwarePins_table[] =
 	servo::servo2040::SENSOR_6_ADDR,		// TS_R3
 	servo::servo2040::CURRENT_SENSE_ADDR,	// CURR
 	servo::servo2040::VOLTAGE_SENSE_ADDR,	// VOLT
-	A0_GPIO_PIN								// RELAY
+	A0_GPIO_PIN,							// RELAY
+	A0_GPIO_PIN								// STATUS (placeholder, never dereferenced)
 };
+
+// Guard against the table silently desyncing from the cmdPins enum: every
+// logical index must have exactly one entry.
+static_assert(sizeof(RP_hardwarePins_table)/sizeof(RP_hardwarePins_table[0]) == cmdPin_num,
+			  "RP_hardwarePins_table must have one entry per logical pin");
 
 /*******************************************************************************
  * Function Forward Declarations

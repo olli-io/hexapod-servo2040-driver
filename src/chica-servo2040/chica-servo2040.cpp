@@ -35,6 +35,16 @@ uint servoEnabled = false;
 static bool     overcurrent_tripped     = false;
 static uint64_t overcurrent_since_us[OVERCURRENT_TIER_COUNT] = {0};
 static uint64_t last_current_sample_us  = 0;
+// Captured at the latching sample so the host can read why we tripped even
+// though live current reads ~0 once the relay is open. Surfaced via STATUS.
+static uint     overcurrent_trip_tier    = 0;
+static float    overcurrent_trip_current = 0.0f;
+
+// True once the host has staged at least one servo position since the last
+// disable. SET RELAY 1 is refused until this is set, so the board never applies
+// power to un-commanded servos (no calibrated midpoint, no stale pre-trip pose).
+// Cleared by SET RELAY 0 and by an over-current trip.
+static bool     servo_pose_staged        = false;
 
 int main()
 {
@@ -122,10 +132,13 @@ static bool validate_header(const cmdPkt &p, bool is_set)
 	if (p.startIdx + p.count > cmdPin_num)  return false;
 	if (is_set)
 	{
-		// TS1..VOLT (18..25) are read-only; reject any SET that overlaps.
+		// Read-only indices are non-contiguous: TS1..VOLT (18..25) and STATUS
+		// (27), with the writable RELAY (26) in between. Reject a SET that
+		// overlaps either region.
 		uint end = p.startIdx + p.count; // exclusive
-		bool disjoint = (end <= TS1) || (p.startIdx > VOLT);
-		if (!disjoint) return false;
+		bool hits_ts_volt = !((end <= TS1) || (p.startIdx > VOLT)); // 18..25
+		bool hits_status  = (p.startIdx <= STATUS) && (end > STATUS); // 27
+		if (hits_ts_volt || hits_status) return false;
 	}
 	return true;
 }
@@ -136,27 +149,58 @@ static void apply_set(cmdPkt &p)
 	{
 		if (p.startIdx <= SERVO18)
 		{
+			// While a trip is latched, drop servo writes entirely so the
+			// stored pulse (returned by GET) stays frozen at the last value
+			// applied before the trip. Without this, set_pulse_with_return()
+			// would overwrite last_enabled_pulse even with load=false,
+			// corrupting the readback. Cleared by SET RELAY 0.
+			if (overcurrent_tripped) continue;
 			servos.pulse(cmdPin_to_hardwarePin((cmdPins)p.startIdx),
 						 p.valueBuff[idx], servoEnabled);
+			// A host pose is now staged in the PWM registers (driven if
+			// servoEnabled, otherwise buffered for the next SET RELAY 1).
+			servo_pose_staged = true;
 		}
-		else if (p.startIdx >= RELAY)
+		else if (p.startIdx == RELAY)
 		{
+			// RELAY is the only writable index >= RELAY; STATUS (27) is
+			// read-only and rejected by validate_header, so it never reaches
+			// here. Matching exactly (not >=) keeps any future read-only high
+			// index from actuating a GPIO if validation ever regresses.
 			bool enableState = p.valueBuff[idx] ? true : false;
-			if (p.startIdx == RELAY)
+			// Explicit disable always wins and clears any latched trip.
+			if (!enableState && overcurrent_tripped)
 			{
-				// Explicit disable always wins and clears any latched trip.
-				if (!enableState && overcurrent_tripped)
-				{
-					overcurrent_tripped = false;
-					connectedVCP_ledSequence();
-				}
-				// Refuse re-enable while the trip is latched; leave A0 LOW.
-				if (overcurrent_tripped) continue;
-				servoEnabled = enableState;
-				if (enableState) servos.enable_all();
-				else             servos.disable_all();
+				overcurrent_tripped      = false;
+				overcurrent_trip_tier    = 0;
+				overcurrent_trip_current = 0.0f;
+				connectedVCP_ledSequence();
 			}
-			gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), enableState);
+			// Refuse re-enable while the trip is latched; leave A0 LOW.
+			if (overcurrent_tripped) continue;
+			if (enableState)
+			{
+				// Require a host-commanded pose before applying power. If
+				// nothing has been staged since the last disable, ignore the
+				// enable and leave A0 LOW — the board never drives un-commanded
+				// servos to a midpoint or a stale pre-trip pose. Startup and
+				// over-current recovery behave identically here.
+				if (!servo_pose_staged) continue;
+				servoEnabled = true;
+				// Latch ONLY the host-staged positions. Unlike enable_all(),
+				// load() never synthesizes a calibrated midpoint for a servo
+				// that was left un-commanded.
+				servos.load();
+				gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), true);
+			}
+			else
+			{
+				servoEnabled = false;
+				servos.disable_all();
+				// Force a fresh host pose before the next enable.
+				servo_pose_staged = false;
+				gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), false);
+			}
 		}
 	}
 }
@@ -171,6 +215,21 @@ static uint telemetry_counts(float value)
 	if (c < 0) c = 0;
 	if (c > (long)TELEMETRY_COUNT_MAX) c = TELEMETRY_COUNT_MAX;
 	return (uint)c;
+}
+
+// Pack the latched over-current state into the 14-bit STATUS word. Reads only
+// static RAM — no mux/ADC/GPIO — so serving it from the GET path cannot perturb
+// an in-flight CURR/VOLT sample in the same frame. Returns 0 when not tripped.
+static uint overcurrent_status_word(void)
+{
+	if (!overcurrent_tripped) return 0;
+	uint w = STATUS_TRIPPED_MASK;
+	w |= (overcurrent_trip_tier << STATUS_TIER_SHIFT) & STATUS_TIER_MASK;
+	long ci = std::lround(overcurrent_trip_current * STATUS_CURRENT_COUNTS_PER_A);
+	if (ci < 0)                            ci = 0;
+	if (ci > (long)STATUS_CURRENT_COUNT_MAX) ci = STATUS_CURRENT_COUNT_MAX;
+	w |= ((uint)ci << STATUS_CURRENT_SHIFT) & STATUS_CURRENT_MASK;
+	return w;
 }
 
 static uint sample_pin(uint startIdx)
@@ -192,7 +251,11 @@ static uint sample_pin(uint startIdx)
 	{
 		return telemetry_counts(read_voltage());
 	}
-	return 0; // unreachable post-validation
+	if (startIdx == STATUS)
+	{
+		return overcurrent_status_word();
+	}
+	return 0; // RELAY (defined 0) or unreachable post-validation
 }
 
 static void emit_byte(uint8_t b, uint8_t &chk)
@@ -349,9 +412,14 @@ void overcurrent_check(void)
 			// debounce_us == 0 trips on the same sample (instant cutoff).
 			if (now - overcurrent_since_us[k] >= tier.debounce_us)
 			{
-				overcurrent_tripped  = true;
-				servoEnabled         = false;
+				overcurrent_tripped      = true;
+				overcurrent_trip_tier    = (uint)k;
+				overcurrent_trip_current = i;
+				servoEnabled             = false;
 				servos.disable_all();
+				// Recovery must re-stage a pose before re-enabling; never
+				// resume the pre-trip positions that drew the fault.
+				servo_pose_staged        = false;
 				gpio_put(A0_GPIO_PIN, 0);
 				fault_ledSequence();
 				return;

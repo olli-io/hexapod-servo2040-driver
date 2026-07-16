@@ -17,7 +17,6 @@ This driver targets the [pimoroni servo 2040 board](https://shop.pimoroni.com/pr
 
 **This repository is part of a multi-repo hexapod stack:**
 - ROS2 hexapod controller - ['olli-io/hexapod-ros2-control'](https://github.com/olli-io/hexapod-ros2-control)
-- Esp32 firmware to drive an oled screen - ['olli-io/hexapod-esp32-display'](https://github.com/olli-io/hexapod-esp32-display)
 
 > [!NOTE]
 > **This repository is a fork** of [EddieCarrera/chica-servo2039-simpleDriver](https://github.com/EddiaCarrera/chica-servo2040-simpleDriver). 
@@ -69,7 +68,7 @@ The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and r
 | 12 A      | 200 ms   | Hard over-stress                 |
 | 11 A      | 1 s      | Sustained draw above rated load  |
 
-When a trip latches, the LED bar turns solid red. The host can re-enable the servos by toggling the relay off (which clears the latch and returns the bar to green) and then back on once the fault condition is cleared.
+When a trip latches, the LED bar turns solid red. To recover, the host toggles the relay off with `SET RELAY 0` (which clears the latch and returns the bar to green), **stages a fresh pose** (servo `SET`s), and then re-enables with `SET RELAY 1` once the fault condition is cleared. The board **does not resume the pre-trip positions** — the pose that drew the fault current is never re-applied. As a safety interlock, `SET RELAY 1` is ignored until a pose has been staged since the last disable, so power is only ever applied to host-commanded servos (there is no power-on "center to midpoint" behaviour). See [`protocol.md`](protocol.md#enabling-servos-the-staged-pose-requirement) for the full bring-up sequence.
 
 ## Servo calibration utility
 Accurate servo positioning requires per-servo PWM calibration values, as demonstrated in MYP's [servo calibration video](https://www.youtube.com/watch?v=UMUeKFPptU4).
