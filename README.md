@@ -34,7 +34,21 @@ To load the firmware onto the Servo 2040 board:
 2) Plug in the USB-C cable to your machine. Hold down the "boot/user" button, press the reset button at the same time, and let go of both buttons. The RP2040 should now appear as a drive to the computer.
 3) Drag and drop the corresponding `.uf2` image file onto the RP2040 drive. The device will automatically reboot and start the loaded program.
 
-The default firmware build uses UART on GP20/GP21 for the host link; pass `-DHOST_LINK=USB` to cmake to produce the USB-CDC variant. See [Host link options](#host-link-options) below.
+The default firmware build uses UART on GP20/GP21 for the host link; pass `--link USB` to produce the USB-CDC variant. See [Host link options](#host-link-options) below.
+
+## Building the firmware
+The images in `dist/` are prebuilt, so building is only necessary to change the configuration or the sources. The build runs in a Docker image that pins the ARM toolchain, the Pico SDK, and picotool (see [`Dockerfile`](Dockerfile)); nothing but Docker is needed on the host.
+
+```
+./build.sh                      # both targets, UART host link (default)
+./build.sh --link USB           # USB-CDC variant
+./build.sh servoCalibration     # a single cmake target
+./build.sh --clean              # discard the build tree and reconfigure
+```
+
+The script builds the image on first use, compiles into `build/`, and copies the resulting `.uf2` images into `dist/`. It runs the container as your own UID (`--user "$(id -u):$(id -g)"`) so the build tree stays writable — the bind mount does not remap UIDs, so a container running as root would leave `build/` owned by root and unrebuildable without `sudo`.
+
+Board-level settings — UART pins and baud, relay GPIO, over-current tiers — live in [`hexapod_config.cmake`](hexapod_config.cmake) as cache variables. Override one for a build by passing it through to cmake, e.g. `-DHEXAPOD_UART_BAUD=115200`.
 
 ## Host link options
 The firmware can be built for either UART (default) or USB-CDC. The wire protocol is identical in both modes; only the transport changes.
@@ -44,7 +58,7 @@ The firmware can be built for either UART (default) or USB-CDC. The wire protoco
 
 To build the UART variant explicitly:
 ```
-cmake -DHOST_LINK=UART ..
+./build.sh --link UART
 ```
 
 ### USB-CDC
@@ -52,7 +66,7 @@ cmake -DHOST_LINK=UART ..
 
 To build the USB variant:
 ```
-cmake -DHOST_LINK=USB ..
+./build.sh --link USB
 ```
 
 ## Powering the board

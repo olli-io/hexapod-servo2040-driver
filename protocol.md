@@ -67,7 +67,17 @@ firmware reassigns each index via `RP_hardwarePins_table` in
 `src/chica-servo2040/main.h`. **The resolved value is not always a GPIO** — it may be
 a servo channel, an ADC-mux channel address, or a real pin:
 
-| Index | Name               | Description       | Resolves to               | Address / pin |
+| Index | Name               | Description       | Resolves to               | Address / pin |Startup, SET RELAY 1 with no pose               │ servo_pose_staged false → continue; relay stays LOW, no motion ✓ │
+├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ Stage pose → SET RELAY 1                        │ load() latches staged pose; legs snap to it, no midpoint ✓       │
+├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ Over-current trip                               │ latch + disable + flag cleared ✓                                 │
+├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ Recovery SET RELAY 0 → SET RELAY 1 (no restage) │ flag false → enable ignored ✓                                    │
+├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ SET RELAY 0 → stage fresh pose → SET RELAY 1    │ drives fresh pose only, never the fault pose ✓                   │
+├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ GET during trip                                 │ servo writes still dropped → readb
 | ----- | ------------------ | ----------------- | ------------------------- | :-----------------: |
 | 0–17  | `SERVO1`–`SERVO18` | Servos            | PIO servo-cluster channel | channel `0`–`17` (GP0–GP17) |
 | 18–23 | `TS1`–`TS6`        | Touch sensors     | ADC-mux channel           | `0b000`–`0b101` (0–5) |

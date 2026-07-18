@@ -5,18 +5,22 @@
 # bind-mounted at build time rather than baked in, so the same image rebuilds
 # any commit.
 #
-# Build the image:
+# Prefer ./build.sh over driving docker by hand — it builds the image on demand
+# and passes the flags below for you:
+#   ./build.sh                 # both targets, UART host link
+#   ./build.sh --link USB      # USB-CDC variant
+#   ./build.sh servoCalibration
+#
+# The equivalent by hand, from the repo root:
 #   docker build -t servo2040-build .
+#   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/project" servo2040-build
 #
-# Build the firmware (from the repo root), output lands in ./build:
-#   docker run --rm -v "$PWD:/project" servo2040-build \
-#     sh -c 'cmake -S . -B build && cmake --build build -j"$(nproc)"'
-#
-# Build just the calibrator:
-#   docker run --rm -v "$PWD:/project" servo2040-build \
-#     sh -c 'cmake -S . -B build && cmake --build build --target servoCalibration -j"$(nproc)"'
-#
-# USB-CDC host-link variant: add -DHOST_LINK=USB to the cmake configure step.
+# --user is not optional. The bind mount shares the host filesystem without
+# translating UIDs, so whatever UID the container writes as is the owner on the
+# host: run as the image's default root and ./build becomes a root-owned tree
+# that your unprivileged user cannot rebuild into or delete without sudo. The
+# image deliberately declares no USER of its own — hardcoding a UID here would
+# only match whoever happened to build the image — so the caller supplies it.
 
 FROM debian:bookworm-slim
 
@@ -58,6 +62,23 @@ RUN git clone --branch "${PICOTOOL_TAG}" --depth 1 \
     && cmake --install /tmp/picotool/build \
     && rm -rf /tmp/picotool
 
+# Make the image usable by any --user UID, not just root. An arbitrary UID has
+# no /etc/passwd entry, so its HOME resolves to "/" (unwritable): point it at
+# /tmp instead, which cmake and gcc need for scratch files. The SDK checkouts
+# are owned by root from the build above, and git refuses to read a repo owned
+# by another user; pico_sdk_import.cmake shells out to git, so mark them safe.
+# Scoped to this throwaway build image, not a pattern for a runtime image.
+ENV HOME=/tmp
+RUN git config --system --add safe.directory "${PICO_SDK_PATH}" \
+    && git config --system --add safe.directory "${PICO_SDK_PATH}/*"
+
 WORKDIR /project
 
+# The entrypoint refuses to run as UID 0 so a --user-less `docker run` cannot
+# silently recreate a root-owned build tree. See the script for the rootless
+# Docker/Podman escape hatch.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["sh", "-c", "cmake -S . -B build && cmake --build build -j\"$(nproc)\""]

@@ -63,23 +63,50 @@ constexpr uint  TELEMETRY_COUNT_MAX			= 16383;
 /* Over-current trip. Tiered inverse-time protection sized for a 10 A
  * continuous rail: higher current shortens the trip delay. Every tier is
  * evaluated each sample and tracks its own dwell timer; the first whose
- * dwell reaches its debounce wins. The top tier (debounce_us == 0) is an
- * instant cutoff for dead-short events. */
+ * dwell reaches its debounce wins. Ordered ascending by threshold, so the top
+ * tier (debounce_us == 0) is the instant cutoff for dead-short events.
+ *
+ * The thresholds, debounce windows and sample interval come from
+ * hexapod_config.cmake as compile definitions; the fallbacks below keep this
+ * header self-contained when built without that config. Keep the two in sync. */
+#ifndef OVERCURRENT_SAMPLE_US
+#define OVERCURRENT_SAMPLE_US			10000		// 10 ms = 100 Hz sampling
+#endif
+#ifndef OVERCURRENT_TIER1_A
+#define OVERCURRENT_TIER1_A				11.0		// 1.1x rated
+#endif
+#ifndef OVERCURRENT_TIER1_DEBOUNCE_US
+#define OVERCURRENT_TIER1_DEBOUNCE_US	1000000		// 1 s sustained
+#endif
+#ifndef OVERCURRENT_TIER2_A
+#define OVERCURRENT_TIER2_A				12.0		// 1.2x rated
+#endif
+#ifndef OVERCURRENT_TIER2_DEBOUNCE_US
+#define OVERCURRENT_TIER2_DEBOUNCE_US	200000		// 200 ms
+#endif
+#ifndef OVERCURRENT_TIER3_A
+#define OVERCURRENT_TIER3_A				15.0		// 1.5x rated
+#endif
+#ifndef OVERCURRENT_TIER3_DEBOUNCE_US
+#define OVERCURRENT_TIER3_DEBOUNCE_US	0			// instant cutoff
+#endif
+
 struct OvercurrentTier
 {
 	float    threshold_A;
 	uint64_t debounce_us;
 };
 
+// The (float)/(uint64_t) casts normalize the config tokens (which may arrive as
+// plain decimals like 11.7) so the braced initializer never triggers a
+// double->float narrowing error.
 constexpr OvercurrentTier OVERCURRENT_TIERS[] = {
-	{ 15.0f,       0 },	// 1.5x rated — instant cutoff
-	{ 12.0f,  200000 },	// 1.2x rated — 200 ms
-	{ 11.0f, 1000000 },	// 1.1x rated — 1 s sustained
+	{ (float)OVERCURRENT_TIER1_A, (uint64_t)OVERCURRENT_TIER1_DEBOUNCE_US },
+	{ (float)OVERCURRENT_TIER2_A, (uint64_t)OVERCURRENT_TIER2_DEBOUNCE_US },
+	{ (float)OVERCURRENT_TIER3_A, (uint64_t)OVERCURRENT_TIER3_DEBOUNCE_US },
 };
 constexpr size_t OVERCURRENT_TIER_COUNT =
 	sizeof(OVERCURRENT_TIERS) / sizeof(OVERCURRENT_TIERS[0]);
-
-constexpr uint64_t OVERCURRENT_SAMPLE_US	= 10000;
 
 /* STATUS (host index 27) latched fault word — 14-bit, LSB-first, read-only over
  * GET. Zero == clean (no fault). Bit 0: over-current latch active. Bits 1..3:

@@ -31,6 +31,22 @@ set(HEXAPOD_UART_BAUD 460800 CACHE STRING "stdio UART baud rate")
 # A0 doubles as the primary RELAY control line, so RELAY and A0 share one pin.
 set(HEXAPOD_RELAY_PIN      26 CACHE STRING "Primary relay / A0 control GPIO")
 
+# ---- Over-current protection ------------------------------------------------
+# Tiered inverse-time trip sized for a 10 A continuous rail. A tier fires when
+# the rail current stays at/above its threshold_A for at least debounce_us; the
+# first tier to satisfy its dwell wins. Ordered ascending by threshold, so the
+# top tier (debounce 0) is the instant cutoff for dead-shorts. These are applied
+# as compile definitions and mirror the self-contained fallbacks in
+# src/chica-servo2040/main.h.
+set(HEXAPOD_OVERCURRENT_SAMPLE_US 10000 CACHE STRING "Current-sense sample interval (us) - 10 ms = 100 Hz")
+
+set(HEXAPOD_OVERCURRENT_TIER1_A           10.0    CACHE STRING "Tier 1 trip threshold (A) - 1.1x rated")
+set(HEXAPOD_OVERCURRENT_TIER1_DEBOUNCE_US 5000000 CACHE STRING "Tier 1 dwell before trip (us) - 5 s sustained")
+set(HEXAPOD_OVERCURRENT_TIER2_A           12.0    CACHE STRING "Tier 2 trip threshold (A) - 1.2x rated")
+set(HEXAPOD_OVERCURRENT_TIER2_DEBOUNCE_US 500000  CACHE STRING "Tier 2 dwell before trip (us) - 500 ms")
+set(HEXAPOD_OVERCURRENT_TIER3_A           15.0    CACHE STRING "Tier 3 trip threshold (A) - 1.5x rated")
+set(HEXAPOD_OVERCURRENT_TIER3_DEBOUNCE_US 0       CACHE STRING "Tier 3 dwell before trip (us) - instant cutoff")
+
 # hexapod_apply_config(<target> [LINK <USB|UART>])
 #
 # Applies the shared configuration to <target>: selects the stdio backend,
@@ -43,10 +59,17 @@ function(hexapod_apply_config target)
     set(link "${HOST_LINK}")
   endif()
 
-  # Shared pin definitions (read by the C/C++ sources).
+  # Shared definitions (read by the C/C++ sources).
   target_compile_definitions(${target} PRIVATE
     RELAY_GPIO_PIN=${HEXAPOD_RELAY_PIN}
     A0_GPIO_PIN=${HEXAPOD_RELAY_PIN}
+    OVERCURRENT_SAMPLE_US=${HEXAPOD_OVERCURRENT_SAMPLE_US}
+    OVERCURRENT_TIER1_A=${HEXAPOD_OVERCURRENT_TIER1_A}
+    OVERCURRENT_TIER1_DEBOUNCE_US=${HEXAPOD_OVERCURRENT_TIER1_DEBOUNCE_US}
+    OVERCURRENT_TIER2_A=${HEXAPOD_OVERCURRENT_TIER2_A}
+    OVERCURRENT_TIER2_DEBOUNCE_US=${HEXAPOD_OVERCURRENT_TIER2_DEBOUNCE_US}
+    OVERCURRENT_TIER3_A=${HEXAPOD_OVERCURRENT_TIER3_A}
+    OVERCURRENT_TIER3_DEBOUNCE_US=${HEXAPOD_OVERCURRENT_TIER3_DEBOUNCE_US}
   )
 
   if(link STREQUAL "USB")
