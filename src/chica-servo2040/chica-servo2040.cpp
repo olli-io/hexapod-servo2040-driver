@@ -35,6 +35,11 @@ uint servoEnabled = false;
 static bool     overcurrent_tripped     = false;
 static uint64_t overcurrent_since_us[OVERCURRENT_TIER_COUNT] = {0};
 static uint64_t last_current_sample_us  = 0;
+// Running accumulator for the OVERCURRENT_AVG_SAMPLES-wide averaging window. The
+// tier logic runs on the completed average (20 Hz), not each raw 200 Hz sample,
+// so servo inrush pulses no longer nuisance-trip. Reset on disable.
+static float    overcurrent_sample_sum   = 0.0f;
+static uint     overcurrent_sample_count = 0;
 // Captured at the latching sample so the host can read why we tripped even
 // though live current reads ~0 once the relay is open. Surfaced via STATUS.
 static uint     overcurrent_trip_tier    = 0;
@@ -390,9 +395,12 @@ void overcurrent_check(void)
 	{
 		// Cleared every time the cluster is disabled so that the next enable
 		// starts each tier's debounce window from zero (avoids inrush
-		// carrying over).
+		// carrying over). The averaging accumulator is dropped for the same
+		// reason: a partial or inrush-loaded window must not survive a disable.
 		for (size_t k = 0; k < OVERCURRENT_TIER_COUNT; k++)
 			overcurrent_since_us[k] = 0;
+		overcurrent_sample_sum   = 0.0f;
+		overcurrent_sample_count = 0;
 		return;
 	}
 
@@ -400,7 +408,14 @@ void overcurrent_check(void)
 	if (now - last_current_sample_us < OVERCURRENT_SAMPLE_US) return;
 	last_current_sample_us = now;
 
-	float i = read_current();
+	// Accumulate raw samples at OVERCURRENT_SAMPLE_US (200 Hz); only evaluate the
+	// tiers once a full window is collected, against its average (20 Hz).
+	overcurrent_sample_sum += read_current();
+	if (++overcurrent_sample_count < OVERCURRENT_AVG_SAMPLES) return;
+	float i = overcurrent_sample_sum / overcurrent_sample_count;
+	overcurrent_sample_sum   = 0.0f;
+	overcurrent_sample_count = 0;
+
 	for (size_t k = 0; k < OVERCURRENT_TIER_COUNT; k++)
 	{
 		const OvercurrentTier& tier = OVERCURRENT_TIERS[k];

@@ -153,14 +153,15 @@ fault); non-zero means a fault is latched:
 | Bits  | Field          | Meaning                                                         |
 | ----- | -------------- | --------------------------------------------------------------- |
 | 0     | `TRIPPED`      | 1 = over-current latch active (definitive flag)                 |
-| 1–10  | `TRIP_CURRENT` | current at the trip, `0.1 A`/count, 0–102.3 A (saturates)       |
-| 11–13 | —              | reserved (0)                                                    |
+| 1–3   | `TIER`         | which `OVERCURRENT_TIERS` entry fired (valid when `TRIPPED`)    |
+| 4–13  | `TRIP_CURRENT` | current at the trip, `0.1 A`/count, 0–102.3 A (saturates)       |
 
 Decode:
 
 ```
 tripped   =  value        & 0x1
-trip_amps = ((value >> 1)  & 0x3FF) * 0.1
+tier      = (value >> 1)   & 0x7
+trip_amps = ((value >> 4)  & 0x3FF) * 0.1
 ```
 
 The word is **sticky**: it keeps reporting the trip on every poll — no matter how

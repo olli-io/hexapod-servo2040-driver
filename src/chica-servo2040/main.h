@@ -70,7 +70,14 @@ constexpr uint  TELEMETRY_COUNT_MAX			= 16383;
  * hexapod_config.cmake as compile definitions; the fallbacks below keep this
  * header self-contained when built without that config. Keep the two in sync. */
 #ifndef OVERCURRENT_SAMPLE_US
-#define OVERCURRENT_SAMPLE_US			10000		// 10 ms = 100 Hz sampling
+#define OVERCURRENT_SAMPLE_US			5000		// 5 ms = 200 Hz sampling
+#endif
+// Raw samples averaged per trip evaluation. At OVERCURRENT_SAMPLE_US = 5 ms this
+// makes the tier logic act on a 200 Hz / OVERCURRENT_AVG_SAMPLES = 20 Hz averaged
+// current, smoothing servo inrush pulses that would otherwise nuisance-trip on a
+// single raw sample. Also comes from hexapod_config.cmake; keep the two in sync.
+#ifndef OVERCURRENT_AVG_SAMPLES
+#define OVERCURRENT_AVG_SAMPLES			10			// 10 samples @200Hz -> 20Hz eval
 #endif
 #ifndef OVERCURRENT_TIER1_A
 #define OVERCURRENT_TIER1_A				11.0		// 1.1x rated

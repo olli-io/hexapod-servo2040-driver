@@ -38,14 +38,17 @@ set(HEXAPOD_RELAY_PIN      26 CACHE STRING "Primary relay / A0 control GPIO")
 # top tier (debounce 0) is the instant cutoff for dead-shorts. These are applied
 # as compile definitions and mirror the self-contained fallbacks in
 # src/chica-servo2040/main.h.
-set(HEXAPOD_OVERCURRENT_SAMPLE_US 10000 CACHE STRING "Current-sense sample interval (us) - 10 ms = 100 Hz")
+set(HEXAPOD_OVERCURRENT_SAMPLE_US 5000 CACHE STRING "Current-sense sample interval (us) - 5 ms = 200 Hz")
+# Raw samples averaged per trip evaluation: tiers act on a 200Hz/N = 20Hz averaged
+# current, smoothing servo inrush pulses. Mirrors the fallback in main.h.
+set(HEXAPOD_OVERCURRENT_AVG_SAMPLES 10 CACHE STRING "Samples averaged per trip eval - 10 @200Hz = 20 Hz")
 
 set(HEXAPOD_OVERCURRENT_TIER1_A           10.0    CACHE STRING "Tier 1 trip threshold (A) - 1.1x rated")
-set(HEXAPOD_OVERCURRENT_TIER1_DEBOUNCE_US 5000000 CACHE STRING "Tier 1 dwell before trip (us) - 5 s sustained")
+set(HEXAPOD_OVERCURRENT_TIER1_DEBOUNCE_US 10000000 CACHE STRING "Tier 1 dwell before trip (us) - 10 s sustained")
 set(HEXAPOD_OVERCURRENT_TIER2_A           12.0    CACHE STRING "Tier 2 trip threshold (A) - 1.2x rated")
-set(HEXAPOD_OVERCURRENT_TIER2_DEBOUNCE_US 500000  CACHE STRING "Tier 2 dwell before trip (us) - 500 ms")
+set(HEXAPOD_OVERCURRENT_TIER2_DEBOUNCE_US 2000000  CACHE STRING "Tier 2 dwell before trip (us) - 2s sustained ms")
 set(HEXAPOD_OVERCURRENT_TIER3_A           15.0    CACHE STRING "Tier 3 trip threshold (A) - 1.5x rated")
-set(HEXAPOD_OVERCURRENT_TIER3_DEBOUNCE_US 0       CACHE STRING "Tier 3 dwell before trip (us) - instant cutoff")
+set(HEXAPOD_OVERCURRENT_TIER3_DEBOUNCE_US 500000 CACHE STRING "Tier 3 dwell before trip (us) - 500ms sustained")
 
 # hexapod_apply_config(<target> [LINK <USB|UART>])
 #
@@ -64,6 +67,7 @@ function(hexapod_apply_config target)
     RELAY_GPIO_PIN=${HEXAPOD_RELAY_PIN}
     A0_GPIO_PIN=${HEXAPOD_RELAY_PIN}
     OVERCURRENT_SAMPLE_US=${HEXAPOD_OVERCURRENT_SAMPLE_US}
+    OVERCURRENT_AVG_SAMPLES=${HEXAPOD_OVERCURRENT_AVG_SAMPLES}
     OVERCURRENT_TIER1_A=${HEXAPOD_OVERCURRENT_TIER1_A}
     OVERCURRENT_TIER1_DEBOUNCE_US=${HEXAPOD_OVERCURRENT_TIER1_DEBOUNCE_US}
     OVERCURRENT_TIER2_A=${HEXAPOD_OVERCURRENT_TIER2_A}
