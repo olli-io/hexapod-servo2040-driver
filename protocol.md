@@ -67,17 +67,7 @@ firmware reassigns each index via `RP_hardwarePins_table` in
 `src/chica-servo2040/main.h`. **The resolved value is not always a GPIO** — it may be
 a servo channel, an ADC-mux channel address, or a real pin:
 
-| Index | Name               | Description       | Resolves to               | Address / pin |Startup, SET RELAY 1 with no pose               │ servo_pose_staged false → continue; relay stays LOW, no motion ✓ │
-├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-│ Stage pose → SET RELAY 1                        │ load() latches staged pose; legs snap to it, no midpoint ✓       │
-├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-│ Over-current trip                               │ latch + disable + flag cleared ✓                                 │
-├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-│ Recovery SET RELAY 0 → SET RELAY 1 (no restage) │ flag false → enable ignored ✓                                    │
-├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-│ SET RELAY 0 → stage fresh pose → SET RELAY 1    │ drives fresh pose only, never the fault pose ✓                   │
-├─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-│ GET during trip                                 │ servo writes still dropped → readb
+| Index | Name               | Description       | Resolves to               | Address / pin |
 | ----- | ------------------ | ----------------- | ------------------------- | :-----------------: |
 | 0–17  | `SERVO1`–`SERVO18` | Servos            | PIO servo-cluster channel | channel `0`–`17` (GP0–GP17) |
 | 18–23 | `TS1`–`TS6`        | Touch sensors     | ADC-mux channel           | `0b000`–`0b101` (0–5) |
@@ -165,46 +155,59 @@ trip_amps = ((value >> 4)  & 0x3FF) * 0.1
 ```
 
 The word is **sticky**: it keeps reporting the trip on every poll — no matter how
-slowly the host polls — until the host clears it by sending `SET RELAY 0` (the
-same disable line). That clears the latch and re-arms; a subsequent `SET RELAY 1`
-re-enables (subject to the staged-pose requirement below) and `STATUS` reads `0`
-again. Live current reads ~0 once the relay is open, which is why the current *at
-the trip* is captured in the word rather than read back afterwards.
+slowly the host polls — until the host clears it with **either** relay command.
+`SET RELAY 1` clears the latch and re-powers the (limp) rail in one step (direct
+recovery); `SET RELAY 0` clears it and stays disabled. Either way `STATUS` reads
+`0` afterwards. Live current reads ~0 once the relay is open, which is why the
+current *at the trip* is captured in the word rather than read back afterwards.
 
 Recommended host handling: on a non-zero `STATUS`, stop issuing servo `SET`s,
 surface the fault (trip current) to the operator, then recover with
-`SET RELAY 0` → stage a fresh pose (servo `SET`s) → `SET RELAY 1`. The board does
-**not** resume the pre-trip positions — the pose that drew the fault current is
-never re-applied automatically (see below).
+`SET RELAY 1` → re-drive servos with fresh `SET`s. The board does **not** resume
+the pre-trip positions — the pose that drew the fault current is never re-applied
+automatically (see below).
 
-### Enabling servos: the staged-pose requirement
+### Energizing servos: relay-first, host-ordered
 
 The board **never drives a servo to a position the host has not commanded** —
 there is no power-on "center to midpoint" behaviour. The first position a servo
 assumes is always one the host has sent. This applies identically at cold startup
 and after an over-current recovery.
 
-Mechanically, a servo `SET` sent while the relay is **off** (disabled) is
-*staged*: the pulse is buffered in the PWM registers but not driven. `SET RELAY 1`
-then latches whatever is staged. Consequences for the host:
+`SET RELAY 1` is **decoupled from driving servos**: it closes the relay and
+powers the rail with **every servo limp** (no pulse driven). The host then
+energizes servos by sending servo `SET`s **after** the relay is on — in **any
+order or batch**. Each `SET` drives only its own channel (the firmware reloads
+the PWM from every channel's stored level, and un-commanded channels stay at
+level 0), so **the host alone determines the energize order** and can stagger
+inrush by pacing or batching the `SET`s. Consequences for the host:
 
-- **`SET RELAY 1` is ignored** (the relay stays open, no servos move) **until at
-  least one servo position has been staged since the last disable.** An enable
-  with nothing staged is a silent no-op — the board is polled, so the host
-  confirms success by observing servo response, not an ack.
-- A **disable resets the requirement**: both `SET RELAY 0` and an over-current
-  trip clear the staged-pose flag, so a fresh pose must be staged before the next
-  enable. This is why recovery is `SET RELAY 0` → stage pose → `SET RELAY 1`.
-- Only staged servos are driven on enable; any servo left un-commanded stays limp
-  (no pulse), never a midpoint.
+- **A servo `SET` sent while the relay is off is ignored** — servo writes only
+  take effect once the rail is live. There is no pre-relay staging.
+- `SET RELAY 1` never moves a servo on its own; poll/observe servo response to
+  confirm the rail is live (there is no ack).
+- To reproduce the old atomic "snap the whole pose" behaviour, send one `SET`
+  covering all servos immediately after `SET RELAY 1`.
+- Between `SET RELAY 1` and the first pose the legs are **limp** and may sag
+  under gravity — the host should command a pose promptly.
 
 Recommended bring-up (startup **and** recovery):
 
 ```
-SET <servos> <pose>      # stage a full pose while the relay is off
-SET RELAY 1              # latches the staged pose atomically; legs snap to it
-... stream SET <servos> ...   # subsequent SETs drive immediately
+SET RELAY 1                   # power the rail; all servos limp (undriven)
+SET <servo(s)> <pose> ...     # drive in any order/batch → host sets the energize order
 ```
+
+Behaviour matrix:
+
+| Scenario                                    | Result                                                        |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| `SET RELAY 1` (no prior SET)                | relay closes, rail powered, all servos limp — no motion       |
+| `SET RELAY 1` → `SET` servos (any order)    | each `SET` drives only its own servo; host-ordered energize   |
+| servo `SET` while relay off                 | ignored (no staging, no motion)                               |
+| Over-current trip                           | latch + `disable_all()` + relay dropped + red LED             |
+| `SET RELAY 1` → `SET` servos (after a trip) | clears the latch, re-powers a limp rail, then host re-drives; never the fault pose |
+| servo `SET`/`GET` during trip               | writes dropped (readback frozen at pre-trip pulse)            |
 
 ### Reading telemetry and status in one frame
 

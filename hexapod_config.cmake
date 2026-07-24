@@ -43,11 +43,11 @@ set(HEXAPOD_OVERCURRENT_SAMPLE_US 5000 CACHE STRING "Current-sense sample interv
 # current, smoothing servo inrush pulses. Mirrors the fallback in main.h.
 set(HEXAPOD_OVERCURRENT_AVG_SAMPLES 10 CACHE STRING "Samples averaged per trip eval - 10 @200Hz = 20 Hz")
 
-set(HEXAPOD_OVERCURRENT_TIER1_A           10.0    CACHE STRING "Tier 1 trip threshold (A) - 1.1x rated")
+set(HEXAPOD_OVERCURRENT_TIER1_A           10.0    CACHE STRING "Tier 1 trip threshold (A)")
 set(HEXAPOD_OVERCURRENT_TIER1_DEBOUNCE_US 10000000 CACHE STRING "Tier 1 dwell before trip (us) - 10 s sustained")
-set(HEXAPOD_OVERCURRENT_TIER2_A           12.0    CACHE STRING "Tier 2 trip threshold (A) - 1.2x rated")
-set(HEXAPOD_OVERCURRENT_TIER2_DEBOUNCE_US 2000000  CACHE STRING "Tier 2 dwell before trip (us) - 2s sustained ms")
-set(HEXAPOD_OVERCURRENT_TIER3_A           15.0    CACHE STRING "Tier 3 trip threshold (A) - 1.5x rated")
+set(HEXAPOD_OVERCURRENT_TIER2_A           12.0    CACHE STRING "Tier 2 trip threshold (A)")
+set(HEXAPOD_OVERCURRENT_TIER2_DEBOUNCE_US 2000000  CACHE STRING "Tier 2 dwell before trip (us) - 2 s sustained")
+set(HEXAPOD_OVERCURRENT_TIER3_A           15.0    CACHE STRING "Tier 3 trip threshold (A)")
 set(HEXAPOD_OVERCURRENT_TIER3_DEBOUNCE_US 500000 CACHE STRING "Tier 3 dwell before trip (us) - 500ms sustained")
 
 # hexapod_apply_config(<target> [LINK <USB|UART>])

@@ -29,27 +29,22 @@ WS2812 led_bar(servo2040::NUM_LEDS, pio1, 0, servo2040::LED_DATA);
 
 uint servoEnabled = false;
 
-/* Over-current trip state. While latched, SET RELAY 1 is refused; SET RELAY 0
- * clears the latch (an explicit disable always succeeds and re-arms). One
- * dwell timer per tier — 0 means "currently below this tier's threshold". */
+/* Over-current trip state. While latched, servo writes are dropped; either
+ * relay command clears the latch and re-arms — SET RELAY 1 to recover directly
+ * (re-powers a limp rail), SET RELAY 0 to disable. One dwell timer per tier —
+ * 0 means "currently below this tier's threshold". */
 static bool     overcurrent_tripped     = false;
 static uint64_t overcurrent_since_us[OVERCURRENT_TIER_COUNT] = {0};
 static uint64_t last_current_sample_us  = 0;
 // Running accumulator for the OVERCURRENT_AVG_SAMPLES-wide averaging window. The
 // tier logic runs on the completed average (20 Hz), not each raw 200 Hz sample,
-// so servo inrush pulses no longer nuisance-trip. Reset on disable.
+// so servo inrush pulses no longer nuisance-trip. Reset on disable and enable.
 static float    overcurrent_sample_sum   = 0.0f;
 static uint     overcurrent_sample_count = 0;
 // Captured at the latching sample so the host can read why we tripped even
 // though live current reads ~0 once the relay is open. Surfaced via STATUS.
 static uint     overcurrent_trip_tier    = 0;
 static float    overcurrent_trip_current = 0.0f;
-
-// True once the host has staged at least one servo position since the last
-// disable. SET RELAY 1 is refused until this is set, so the board never applies
-// power to un-commanded servos (no calibrated midpoint, no stale pre-trip pose).
-// Cleared by SET RELAY 0 and by an over-current trip.
-static bool     servo_pose_staged        = false;
 
 int main()
 {
@@ -148,23 +143,38 @@ static bool validate_header(const cmdPkt &p, bool is_set)
 	return true;
 }
 
+// Reset the over-current debounce timers and averaging window so the next
+// enabled window starts from zero — a trip's partial window or a tier's dwell
+// must never carry across a power cycle. Called both when the cluster is
+// disabled and when it is (re-)enabled, so direct SET RELAY 1 recovery (which
+// clears the latch and re-powers in one step, never passing through the
+// disabled reset in overcurrent_check) still starts clean.
+static void overcurrent_reset_window(void)
+{
+	for (size_t k = 0; k < OVERCURRENT_TIER_COUNT; k++)
+		overcurrent_since_us[k] = 0;
+	overcurrent_sample_sum   = 0.0f;
+	overcurrent_sample_count = 0;
+}
+
 static void apply_set(cmdPkt &p)
 {
 	for (uint idx = 0; idx < p.count; idx++, p.startIdx++)
 	{
 		if (p.startIdx <= SERVO18)
 		{
-			// While a trip is latched, drop servo writes entirely so the
-			// stored pulse (returned by GET) stays frozen at the last value
-			// applied before the trip. Without this, set_pulse_with_return()
-			// would overwrite last_enabled_pulse even with load=false,
-			// corrupting the readback. Cleared by SET RELAY 0.
-			if (overcurrent_tripped) continue;
+			// Only drive when the rail is live. servoEnabled is false while the
+			// relay is off AND whenever a trip is latched, so this single guard
+			// both ignores relay-off writes (the host energizes servos by
+			// SET-ing them AFTER SET RELAY 1, in any order/batch) and keeps the
+			// stored pulse (returned by GET) frozen during a trip.
+			if (!servoEnabled) continue;
+			// Drive only this channel to the host's exact pulse. load_pwm()
+			// rebuilds every channel from its stored level, so servos that have
+			// not been commanded yet (level 0) stay limp — the host alone
+			// determines the energize order.
 			servos.pulse(cmdPin_to_hardwarePin((cmdPins)p.startIdx),
-						 p.valueBuff[idx], servoEnabled);
-			// A host pose is now staged in the PWM registers (driven if
-			// servoEnabled, otherwise buffered for the next SET RELAY 1).
-			servo_pose_staged = true;
+						 p.valueBuff[idx], true);
 		}
 		else if (p.startIdx == RELAY)
 		{
@@ -173,37 +183,40 @@ static void apply_set(cmdPkt &p)
 			// here. Matching exactly (not >=) keeps any future read-only high
 			// index from actuating a GPIO if validation ever regresses.
 			bool enableState = p.valueBuff[idx] ? true : false;
-			// Explicit disable always wins and clears any latched trip.
-			if (!enableState && overcurrent_tripped)
+			// Either relay command clears a latched trip. An enable is safe to
+			// clear on because it now re-powers a LIMP rail (drives nothing), so
+			// it can never resume the fault pose: recovery is simply SET RELAY 1
+			// then re-drive servos. SET RELAY 0 still clears too, for a plain
+			// disable.
+			if (overcurrent_tripped)
 			{
 				overcurrent_tripped      = false;
 				overcurrent_trip_tier    = 0;
 				overcurrent_trip_current = 0.0f;
 				connectedVCP_ledSequence();
 			}
-			// Refuse re-enable while the trip is latched; leave A0 LOW.
-			if (overcurrent_tripped) continue;
 			if (enableState)
 			{
-				// Require a host-commanded pose before applying power. If
-				// nothing has been staged since the last disable, ignore the
-				// enable and leave A0 LOW — the board never drives un-commanded
-				// servos to a midpoint or a stale pre-trip pose. Startup and
-				// over-current recovery behave identically here.
-				if (!servo_pose_staged) continue;
+				// Power the rail with every servo limp: energize nothing here.
+				// The host drives servos afterward via SET (any order/batch), so
+				// it alone determines the energize order and can stagger inrush
+				// by pacing. disable_all() guarantees a zero-level buffer BEFORE
+				// power is applied, so no un-commanded servo is ever driven and
+				// there is no midpoint synthesis. Startup and over-current
+				// recovery behave identically here.
 				servoEnabled = true;
-				// Latch ONLY the host-staged positions. Unlike enable_all(),
-				// load() never synthesizes a calibrated midpoint for a servo
-				// that was left un-commanded.
-				servos.load();
+				// Start the over-current window clean: direct SET RELAY 1 recovery
+				// never passes through the disabled reset in overcurrent_check, so
+				// a trip's stale dwell must be cleared here or the next window would
+				// trip instantly.
+				overcurrent_reset_window();
+				servos.disable_all();
 				gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), true);
 			}
 			else
 			{
 				servoEnabled = false;
 				servos.disable_all();
-				// Force a fresh host pose before the next enable.
-				servo_pose_staged = false;
 				gpio_put(cmdPin_to_hardwarePin((cmdPins)p.startIdx), false);
 			}
 		}
@@ -393,14 +406,11 @@ void overcurrent_check(void)
 	if (overcurrent_tripped) return;
 	if (!servoEnabled)
 	{
-		// Cleared every time the cluster is disabled so that the next enable
-		// starts each tier's debounce window from zero (avoids inrush
-		// carrying over). The averaging accumulator is dropped for the same
-		// reason: a partial or inrush-loaded window must not survive a disable.
-		for (size_t k = 0; k < OVERCURRENT_TIER_COUNT; k++)
-			overcurrent_since_us[k] = 0;
-		overcurrent_sample_sum   = 0.0f;
-		overcurrent_sample_count = 0;
+		// Cleared every time the cluster is disabled so the next enable starts
+		// each tier's debounce window from zero (avoids inrush carrying over).
+		// The enable path resets the same state, so direct SET RELAY 1 recovery
+		// starts clean too.
+		overcurrent_reset_window();
 		return;
 	}
 
@@ -432,9 +442,9 @@ void overcurrent_check(void)
 				overcurrent_trip_current = i;
 				servoEnabled             = false;
 				servos.disable_all();
-				// Recovery must re-stage a pose before re-enabling; never
-				// resume the pre-trip positions that drew the fault.
-				servo_pose_staged        = false;
+				// Never resume the pre-trip positions that drew the fault:
+				// recovery is SET RELAY 0 -> SET RELAY 1 (limp rail) -> the
+				// host re-drives servos with fresh SETs.
 				gpio_put(A0_GPIO_PIN, 0);
 				fault_ledSequence();
 				return;
