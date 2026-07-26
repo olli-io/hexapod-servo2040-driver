@@ -12,7 +12,7 @@
 This driver targets the [pimoroni servo 2040 board](https://shop.pimoroni.com/products/servo-2040?variant=39800591679571), a RP2040-based 18-channel servo controller, and exposes the servos and on-board sensors over a simple binary serial protocol so any host can drive them.
 
 **Prebuilt firmware images** (drag onto the RP2040 BOOTSEL drive — see [Loading the Firmware Image](#loading-the-firmware-image)):
-- [`dist/chica-servo2040.uf2`](dist/chica-servo2040.uf2) — main driver firmware (UART host link)
+- [`dist/hexapod-servo2040-firmware.uf2`](dist/hexapod-servo2040-firmware.uf2) — main driver firmware (UART host link)
 - [`dist/servoCalibration.uf2`](dist/servoCalibration.uf2) — servo calibration utility
 
 **This repository is part of a multi-repo hexapod stack:**
@@ -74,7 +74,7 @@ The board can be powered via the pins labelled 5v and (-), or the usb connection
 **Recommended:** when running from a 2s lipo, use a [mini360 step down converter](https://www.google.com/search?q=mini+360+step+down+converter) set to 5V and connected to the aforementioned pins.
 
 ## Over-current Trip
-The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and runs each sample through a tiered inverse-time protection table — higher current shortens the trip delay. When any tier's dwell exceeds its debounce, the firmware latches the servo enable off (disables all PWM outputs and de-asserts the relay). Defaults in `src/chica-servo2040/main.h` are sized for the 10 A continuous rating of the screw terminal block:
+The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and runs each sample through a tiered inverse-time protection table — higher current shortens the trip delay. When any tier's dwell exceeds its debounce, the firmware latches the servo enable off (disables all PWM outputs and de-asserts the relay). Defaults in `src/hexapod-servo2040-firmware/main.h` are sized for the 10 A continuous rating of the screw terminal block:
 
 | Threshold | Debounce | Purpose                          |
 | --------- | -------- | -------------------------------- |

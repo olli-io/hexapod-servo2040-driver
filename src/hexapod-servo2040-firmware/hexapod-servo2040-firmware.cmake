@@ -1,5 +1,5 @@
-set(OUTPUT_NAME chica-servo2040)
-add_executable(${OUTPUT_NAME} chica-servo2040.cpp)
+set(OUTPUT_NAME hexapod-servo2040-firmware)
+add_executable(${OUTPUT_NAME} hexapod-servo2040-firmware.cpp)
 
 target_link_libraries(${OUTPUT_NAME}
         pico_stdlib

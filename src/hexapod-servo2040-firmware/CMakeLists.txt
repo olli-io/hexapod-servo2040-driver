@@ -1,0 +1,1 @@
+include(hexapod-servo2040-firmware.cmake)

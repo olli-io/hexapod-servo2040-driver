@@ -159,6 +159,13 @@ static void overcurrent_reset_window(void)
 
 static void apply_set(cmdPkt &p)
 {
+	// Set true once any servo level is staged (load=false). A single load()
+	// after the whole frame then rebuilds the PWM transition table ONCE instead
+	// of once per servo: an 18-servo SET otherwise called load_pwm() 18x, and
+	// that back-to-back rebuild stalled the main loop long enough to overrun the
+	// 32-byte UART RX FIFO and drop the tail (last value pair) of the next
+	// incoming frame.
+	bool dirty = false;
 	for (uint idx = 0; idx < p.count; idx++, p.startIdx++)
 	{
 		if (p.startIdx <= SERVO18)
@@ -169,12 +176,19 @@ static void apply_set(cmdPkt &p)
 			// SET-ing them AFTER SET RELAY 1, in any order/batch) and keeps the
 			// stored pulse (returned by GET) frozen during a trip.
 			if (!servoEnabled) continue;
-			// Drive only this channel to the host's exact pulse. load_pwm()
-			// rebuilds every channel from its stored level, so servos that have
-			// not been commanded yet (level 0) stay limp — the host alone
-			// determines the energize order.
+			// A sub-minimum pulse (a mangled/misaligned frame that still parses)
+			// would otherwise reach set_pulse_with_return() -> disable_with_return()
+			// and silently DISABLE just this servo (limp). The protocol never
+			// disables a single servo via a 0 pulse, so ignore it and hold the last
+			// commanded position instead.
+			if (p.valueBuff[idx] < SERVO_MIN_PULSE_US) continue;
+			// Stage this channel's level only; defer the (expensive) PWM rebuild
+			// to the single load() after the frame. load_pwm() rebuilds every
+			// channel from its stored level, so servos not yet commanded (level 0)
+			// stay limp — the host alone determines the energize order.
 			servos.pulse(cmdPin_to_hardwarePin((cmdPins)p.startIdx),
-						 p.valueBuff[idx], true);
+						 p.valueBuff[idx], false);
+			dirty = true;
 		}
 		else if (p.startIdx == RELAY)
 		{
@@ -221,6 +235,9 @@ static void apply_set(cmdPkt &p)
 			}
 		}
 	}
+	// One rebuild for the whole frame. The RELAY branch handles its own load via
+	// disable_all(), so this only needs to cover the staged servo writes above.
+	if (dirty) servos.load();
 }
 
 // Encode a battery telemetry reading (volts or amps) into an unsigned wire
@@ -306,7 +323,53 @@ void parse_and_command_task(void)
 	{
 		int c = next_raw_byte(IDLE_POLL_TIMEOUT_US);
 		if (c == PICO_ERROR_TIMEOUT) return;
-		if ((c & 0x80) == 0)              continue; // stray non-command byte
+		if ((c & 0x80) == 0) continue; // stray non-command byte
+
+		if (c == SETALL_CMD)
+		{
+			// Fixed-length fast path: all 18 servos in a 30-byte frame (cmd +
+			// SETALL_PAYLOAD_BYTES) that fits inside the 32-byte RX FIFO, so a
+			// main-loop stall can never truncate it mid-arrival the way the
+			// 39-byte general SET could. Payload = 18 x SETALL_VALUE_BITS-bit
+			// values, MSB-first, packed across the low 7 bits of each byte.
+			uint8_t raw[SETALL_PAYLOAD_BYTES];
+			bool ok = true;
+			for (uint i = 0; i < SETALL_PAYLOAD_BYTES; i++)
+			{
+				int b;
+				if (read_inframe_byte(b) != READ_OK) { ok = false; break; }
+				raw[i] = (uint8_t)b;
+			}
+			if (!ok) continue; // short/mangled frame -> drop it whole (servos hold)
+
+			cmdPkt pkt;
+			pkt.cmd      = set;
+			pkt.startIdx = SERVO1; // 0; the 18 servo indices are contiguous
+			pkt.count    = SETALL_NUM_SERVOS;
+
+			// Unpack the contiguous MSB-first bitstream one value at a time.
+			uint32_t acc = 0;
+			uint nbits = 0, bi = 0;
+			for (uint s = 0; s < SETALL_NUM_SERVOS; s++)
+			{
+				while (nbits < SETALL_VALUE_BITS)
+				{
+					acc = (acc << 7) | (raw[bi++] & 0x7F);
+					nbits += 7;
+				}
+				uint value = (acc >> (nbits - SETALL_VALUE_BITS)) &
+							 ((1u << SETALL_VALUE_BITS) - 1);
+				nbits -= SETALL_VALUE_BITS;
+				if (value > SETALL_VALUE_MAX) value = SETALL_VALUE_MAX;
+				pkt.valueBuff[s] = SETALL_PULSE_BASE_US + value;
+			}
+
+			// Reuse the general SET path: it honours servoEnabled, the sub-min
+			// guard, and the single-load() batching (one PWM rebuild per frame).
+			apply_set(pkt);
+			continue;
+		}
+
 		if (c != SET_CMD && c != GET_CMD) continue; // unknown command
 
 		cmdPkt pkt;

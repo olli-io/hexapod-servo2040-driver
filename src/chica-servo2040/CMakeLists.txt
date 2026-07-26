@@ -1,1 +1,0 @@
-include(chica-servo2040.cmake)

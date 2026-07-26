@@ -13,8 +13,9 @@
  * Definitions
  ******************************************************************************/
 /* Commands */
-#define SET_CMD	0xD3 // 0x53 & 0x80
-#define GET_CMD	0xC7 // 0x47 & 0x80
+#define SET_CMD		0xD3 // 0x53 | 0x80
+#define GET_CMD		0xC7 // 0x47 | 0x80
+#define SETALL_CMD	0xD5 // 0x55 | 0x80 - drive all 18 servos in one compact frame
 
 /* Relay control pin. The number comes from hexapod_config.cmake as a compile
  * definition; the fallback keeps this header self-contained if built without
@@ -30,6 +31,35 @@
 
 /* Miscellaneous */
 #define MAX_COUNT_VALUE		127
+
+/* Lowest pulse (us) a servo SET is allowed to command. A value below this is
+ * treated as "ignore, hold last position" rather than driven: the servo library
+ * disables (goes limp) any pulse under its MIN_VALID_PULSE, and the protocol
+ * never disables a single servo via a 0 pulse (that is what RELAY is for). Matches
+ * the servo library's DEFAULT_MIN_PULSE and the calibration tool's floor. Also
+ * from hexapod_config.cmake as a compile definition; keep the two in sync. */
+#ifndef SERVO_MIN_PULSE_US
+#define SERVO_MIN_PULSE_US		500
+#endif
+
+/* SETALL fast path. Drives all 18 servos with a single fixed-length frame that
+ * fits inside the RP2040's 32-byte UART RX FIFO, so a main-loop stall can never
+ * truncate it mid-arrival (unlike the 39-byte general SET). Frame layout:
+ *
+ *   [SETALL_CMD] + SETALL_PAYLOAD_BYTES payload bytes   (1 + 29 = 30 bytes)
+ *
+ * Payload carries SETALL_NUM_SERVOS values of SETALL_VALUE_BITS bits each,
+ * MSB-first, packed contiguously across the low 7 bits (MSB clear) of each
+ * payload byte. Each value encodes an offset pulse: value = pulse_us -
+ * SETALL_PULSE_BASE_US, range 0..SETALL_VALUE_MAX => 500..2500 us at 1 us
+ * resolution. The MSB-clear invariant is preserved, so a dropped byte still
+ * resyncs on the next command byte and the whole frame is dropped atomically. */
+#define SETALL_NUM_SERVOS		18
+#define SETALL_VALUE_BITS		11
+#define SETALL_PULSE_BASE_US	500
+#define SETALL_VALUE_MAX		2000	// base + 2000 = 2500 us
+// ceil(SETALL_NUM_SERVOS * SETALL_VALUE_BITS / 7) = ceil(198/7) = 29
+#define SETALL_PAYLOAD_BYTES	29
 
 /*******************************************************************************
  * Constants

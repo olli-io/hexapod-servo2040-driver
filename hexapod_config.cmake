@@ -1,7 +1,7 @@
 # hexapod_config.cmake
 #
 # Single source of truth for the board-level configuration shared by every
-# firmware target (chica-servo2040, servoCalibration, ...).
+# firmware target (hexapod-servo2040-firmware, servoCalibration, ...).
 #
 # Everything here is either a CMake cache variable — overridable on the cmake
 # command line with -D<NAME>=<value> — or applied to a target as a compile
@@ -31,13 +31,20 @@ set(HEXAPOD_UART_BAUD 460800 CACHE STRING "stdio UART baud rate")
 # A0 doubles as the primary RELAY control line, so RELAY and A0 share one pin.
 set(HEXAPOD_RELAY_PIN      26 CACHE STRING "Primary relay / A0 control GPIO")
 
+# ---- Servo command floor ----------------------------------------------------
+# Lowest pulse (us) a servo SET is allowed to command; a value below this is held
+# rather than driven, so a mangled frame cannot silently disable one servo. Mirrors
+# the self-contained fallback in src/hexapod-servo2040-firmware/main.h and the servo library's
+# DEFAULT_MIN_PULSE.
+set(HEXAPOD_SERVO_MIN_PULSE_US 500 CACHE STRING "Lowest pulse (us) a servo SET may command")
+
 # ---- Over-current protection ------------------------------------------------
 # Tiered inverse-time trip sized for a 10 A continuous rail. A tier fires when
 # the rail current stays at/above its threshold_A for at least debounce_us; the
 # first tier to satisfy its dwell wins. Ordered ascending by threshold, so the
 # top tier (debounce 0) is the instant cutoff for dead-shorts. These are applied
 # as compile definitions and mirror the self-contained fallbacks in
-# src/chica-servo2040/main.h.
+# src/hexapod-servo2040-firmware/main.h.
 set(HEXAPOD_OVERCURRENT_SAMPLE_US 5000 CACHE STRING "Current-sense sample interval (us) - 5 ms = 200 Hz")
 # Raw samples averaged per trip evaluation: tiers act on a 200Hz/N = 20Hz averaged
 # current, smoothing servo inrush pulses. Mirrors the fallback in main.h.
@@ -66,6 +73,7 @@ function(hexapod_apply_config target)
   target_compile_definitions(${target} PRIVATE
     RELAY_GPIO_PIN=${HEXAPOD_RELAY_PIN}
     A0_GPIO_PIN=${HEXAPOD_RELAY_PIN}
+    SERVO_MIN_PULSE_US=${HEXAPOD_SERVO_MIN_PULSE_US}
     OVERCURRENT_SAMPLE_US=${HEXAPOD_OVERCURRENT_SAMPLE_US}
     OVERCURRENT_AVG_SAMPLES=${HEXAPOD_OVERCURRENT_AVG_SAMPLES}
     OVERCURRENT_TIER1_A=${HEXAPOD_OVERCURRENT_TIER1_A}

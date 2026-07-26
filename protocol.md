@@ -32,6 +32,60 @@ Note #1: the board and the phone agree on the pin indices based on the config of
 
 Note #2: The optimal case is when all the servos are set to consecutive pins, and we can set all of them with a single command. But even if the pins are not consecutive, the phone can optimize the commands and set the servo values in batches of consecutive pins.
 
+## SETALL command (compact all-servos fast path)
+
+`SET` addressing all 18 servos is `[S][0][18]` + 18×2 value bytes = **39 bytes**.
+That exceeds the RP2040's **32-byte UART RX FIFO**, so the firmware must drain it
+mid-arrival; if the main loop stalls while the frame streams in, the FIFO overruns
+and the **tail** of the frame is lost (the last servo). `SETALL` avoids this by
+packing all 18 servo pulses into a **single 30-byte frame that fits entirely inside
+the FIFO** — the loop can be busy for the whole frame and lose nothing, as long as
+it drains once per frame period.
+
+`SETALL` is a servo-only fast path; it does **not** replace `SET`. Keep using `SET`
+for partial/single-servo updates, the relay, and the calibration tool.
+
+Format (fixed length, no start/count header):
+
+```
+[1 byte: SETALL_CMD] [29 payload bytes]                    // 30 bytes total
+```
+
+- **Command byte:** `SETALL_CMD = 0x55 | 0x80 = 0xD5` (MSB set, like `S`/`G`).
+- **Payload:** the 18 servo values, **most-significant-servo-first (servo 1 → 18)**,
+  each **11 bits**, concatenated into one MSB-first bitstream, then emitted 7 bits
+  at a time into the low 7 bits of each payload byte (**MSB stays clear**, so
+  resync still works). 18 × 11 = 198 bits → ⌈198/7⌉ = **29 bytes**; the final byte's
+  low 5 bits are zero padding.
+- **Value encoding:** `value = pulse_us − 500`, range `0…2000` → `500…2500 µs` at
+  **1 µs resolution**. Out-of-range values are clamped by the firmware.
+
+Because every payload byte keeps its MSB clear, a dropped/corrupted byte still
+resyncs on the next command byte and the **entire frame is dropped atomically**
+(the servos hold their last position) — the same failure semantics as `SET`. There
+is no checksum (2 spare bytes remain in the FIFO budget if one is added later).
+
+Host encode (C):
+
+```c
+// pulses[18] in microseconds (500..2500). Emits 29 payload bytes after the
+// SETALL_CMD byte. Mirror of the firmware unpacker.
+uint32_t acc = 0; unsigned nbits = 0, o = 0;
+out[o++] = 0xD5;                                  // SETALL_CMD
+for (int s = 0; s < 18; s++) {
+    int v = pulses[s] - 500;
+    if (v < 0) v = 0; else if (v > 2000) v = 2000;
+    acc = (acc << 11) | (uint32_t)v; nbits += 11;
+    while (nbits >= 7) { out[o++] = (acc >> (nbits - 7)) & 0x7F; nbits -= 7; }
+}
+if (nbits > 0) out[o++] = (acc << (7 - nbits)) & 0x7F;  // pad low bits with 0
+// o == 30
+```
+
+The board applies all 18 in one PWM reload and honours the same rules as `SET`:
+writes are ignored while the relay is off / a fault is latched, and a pulse below
+500 µs holds the last position rather than disabling the servo.
+
 ## GET command
 
 Sent by the host to get the value of a pin or a sequence of pins, which can be a servo pulse width for a servo pin, or a sensor input such as voltage, current or the touch sensors.
@@ -64,7 +118,7 @@ Example #2: get the value on pins 20 to 25
 
 The host addresses a **flat logical pin index** (`0`–`26`), not a GPIO. The
 firmware reassigns each index via `RP_hardwarePins_table` in
-`src/chica-servo2040/main.h`. **The resolved value is not always a GPIO** — it may be
+`src/hexapod-servo2040-firmware/main.h`. **The resolved value is not always a GPIO** — it may be
 a servo channel, an ADC-mux channel address, or a real pin:
 
 | Index | Name               | Description       | Resolves to               | Address / pin |
