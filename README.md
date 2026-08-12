@@ -1,11 +1,6 @@
 # Uart Driver for the Pimoroni Servo 2040
 
 > [!WARNING]
-> **Work in progress** — This project is under active development. APIs,
-> configuration, and behavior may change without notice, and some features are
-> incomplete or untested. Use at your own risk. THERE ARE NO QUARANTEES THAT THE NEWEST COMMIT RUNS.
-
-> [!WARNING]
 > **BEWARE WHEN CONNECTING TO EXT. POWER OR BATTERY**:
 > When you are running servos with a higher voltage than 4V, you **need** to cut the 'Separate USB and Ext. Power' trace on the back of the board. Otherwise you may destroy the board itself or any device connected to the usb.
 
