@@ -15,7 +15,9 @@ This driver targets the [pimoroni servo 2040 board](https://shop.pimoroni.com/pr
 - [`dist/hexapod-servo2040-firmware.uf2`](dist/hexapod-servo2040-firmware.uf2) — main driver firmware (UART host link)
 - [`dist/servoCalibration.uf2`](dist/servoCalibration.uf2) — servo calibration utility
 
-**This repository is part of a multi-repo hexapod stack:**
+## Companion repositories
+
+- Hexapod build instructions (main repo) - ['olli-io/hexapod'](https://github.com/olli-io/hexapod)
 - ROS2 hexapod controller - ['olli-io/hexapod-ros2-control'](https://github.com/olli-io/hexapod-ros2-control)
 
 > [!NOTE]
