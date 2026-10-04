@@ -1,4 +1,4 @@
-set(OUTPUT_NAME servoCalibration)
+set(OUTPUT_NAME servo-calibration)
 add_executable(${OUTPUT_NAME} servoCalibration.cpp)
 
 target_link_libraries(${OUTPUT_NAME}

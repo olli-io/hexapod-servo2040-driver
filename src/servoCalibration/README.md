@@ -25,7 +25,7 @@ whole process.
 
 1. **Load the firmware.** Put the board into BOOTSEL mode (hold *boot/user*,
    press *reset*, release both) and drag
-   [`dist/servoCalibration.uf2`](../../dist/servoCalibration.uf2) onto the drive
+   [`dist/servo-calibration.uf2`](../../dist/servo-calibration.uf2) onto the drive
    that appears. See the [root README](../../README.md#loading-the-firmware-image)
    for details.
 

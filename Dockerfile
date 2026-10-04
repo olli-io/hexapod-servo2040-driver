@@ -9,7 +9,7 @@
 # and passes the flags below for you:
 #   ./build.sh                 # both targets, UART host link
 #   ./build.sh --link USB      # USB-CDC variant
-#   ./build.sh servoCalibration
+#   ./build.sh servo-calibration
 #
 # The equivalent by hand, from the repo root:
 #   docker build -t servo2040-build .

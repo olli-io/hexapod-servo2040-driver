@@ -8,7 +8,7 @@
 #
 #   ./build.sh                      # both targets, UART host link (default)
 #   ./build.sh --link USB           # USB-CDC variant
-#   ./build.sh servoCalibration     # just the calibrator
+#   ./build.sh servo-calibration    # just the calibrator
 #   ./build.sh --clean              # drop the build tree and reconfigure
 #   ./build.sh -DHEXAPOD_UART_BAUD=115200
 #

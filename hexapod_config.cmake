@@ -1,7 +1,7 @@
 # hexapod_config.cmake
 #
 # Single source of truth for the board-level configuration shared by every
-# firmware target (hexapod-servo2040-firmware, servoCalibration, ...).
+# firmware target (hexapod-servo2040-firmware, servo-calibration, ...).
 #
 # Everything here is either a CMake cache variable — overridable on the cmake
 # command line with -D<NAME>=<value> — or applied to a target as a compile
