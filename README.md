@@ -1,45 +1,41 @@
-# Uart Driver for the Pimoroni Servo 2040
+# UART Driver for the Pimoroni Servo 2040
+
+Firmware for the [Pimoroni Servo 2040](https://shop.pimoroni.com/products/servo-2040?variant=39800591679571) (RP2040, 18 servo channels). It exposes the servos and on-board sensors to a host over a simple binary serial protocol.
 
 > [!WARNING]
-> **Work in progress** — This project is under active development. APIs,
-> configuration, and behavior may change without notice, and some features are
-> incomplete or untested. Use at your own risk. THERE ARE NO QUARANTEES THAT THE NEWEST COMMIT RUNS.
+> **External power / battery:** if the servos run at more than 4 V, you **must** cut the 'Separate USB and Ext. Power' trace on the back of the board. If you do not, you can destroy the board or the device connected to the USB.
 
-> [!WARNING]
-> **BEWARE WHEN CONNECTING TO EXT. POWER OR BATTERY**:
-> When you are running servos with a higher voltage than 4V, you **need** to cut the 'Separate USB and Ext. Power' trace on the back of the board. Otherwise you may destroy the board itself or any device connected to the usb.
-
-This driver targets the [pimoroni servo 2040 board](https://shop.pimoroni.com/products/servo-2040?variant=39800591679571), a RP2040-based 18-channel servo controller, and exposes the servos and on-board sensors over a simple binary serial protocol so any host can drive them.
-
-**Prebuilt firmware images** (drag onto the RP2040 BOOTSEL drive — see [Loading the Firmware Image](#loading-the-firmware-image)):
-- [`dist/hexapod-servo2040-firmware.uf2`](dist/hexapod-servo2040-firmware.uf2) — main driver firmware (UART host link)
+**Prebuilt firmware images:**
 - [`dist/servoCalibration.uf2`](dist/servoCalibration.uf2) — servo calibration utility
+- [`dist/hexapod-servo2040-firmware.uf2`](dist/hexapod-servo2040-firmware.uf2) — main driver firmware (UART host link)
+
+## 1. Servo calibration utility
+Each servo needs its own PWM calibration values for accurate positioning (see MYP's [servo calibration video](https://www.youtube.com/watch?v=UMUeKFPptU4)).
+
+1. Load [`servoCalibration.uf2`](dist/servoCalibration.uf2) onto the board (see [Loading firmware](#2-loading-firmware)).
+2. Follow the instructions in [`src/servoCalibration/README.md`](src/servoCalibration/README.md). Tutorial video: [here](https://youtu.be/w5ZRXiZLpTk).
+3. At the end, the utility shows a table of PWM values. Copy or screenshot it for your host configuration.
+
+## 2. Loading firmware
+1. Read the warnings above.
+2. Connect the board to your computer with a USB-C cable.
+3. Hold the "boot/user" button, push the reset button, then release both. The RP2040 shows as a drive.
+4. Drag the `.uf2` file onto the drive. The board reboots and starts the firmware.
+
+The prebuilt main firmware uses UART on GP20/GP21. For USB-CDC, build with `--link USB` (see [Host link options](#host-link-options)).
+
+## Powering the board
+Supply power through the `5v` and `(-)` pins, or through USB. Read the power warning above.
+**Recommended:** with a 2S LiPo, use a [mini360 step-down converter](https://www.google.com/search?q=mini+360+step+down+converter) set to 5 V on these pins.
 
 ## Companion repositories
+- Hexapod build instructions (main repo): [olli-io/hexapod](https://github.com/olli-io/hexapod)
+- ROS2 hexapod controller: [olli-io/hexapod-ros2-control](https://github.com/olli-io/hexapod-ros2-control)
 
-- Hexapod build instructions (main repo) - ['olli-io/hexapod'](https://github.com/olli-io/hexapod)
-- ROS2 hexapod controller - ['olli-io/hexapod-ros2-control'](https://github.com/olli-io/hexapod-ros2-control)
-
-> [!NOTE]
-> **This repository is a fork** of [EddieCarrera/chica-servo2039-simpleDriver](https://github.com/EddiaCarrera/chica-servo2040-simpleDriver). 
-> This driver was originally made for the [MYP project](https://github.com/makeyourpet/hexapod).
-
-> It diverges from the upstream firmware in three ways:
-> - The host link defaults to **UART on GP20/GP21** but can be built for **USB-CDC** (see [Host link options](#host-link-options)).
-> - The **GET reply is terminated with an MSB-set framing byte** so the host can resynchronize unambiguously.
-> - A **firmware-side over-current trip** drops the servo enable when the bus current exceeds a configurable threshold.
-> - The full wire protocol used by this fork is documented in [`protocol.md`](protocol.md). 
-
-## Loading the Firmware Image
-To load the firmware onto the Servo 2040 board:
-1) **Read the warnings before**
-2) Plug in the USB-C cable to your machine. Hold down the "boot/user" button, press the reset button at the same time, and let go of both buttons. The RP2040 should now appear as a drive to the computer.
-3) Drag and drop the corresponding `.uf2` image file onto the RP2040 drive. The device will automatically reboot and start the loaded program.
-
-The default firmware build uses UART on GP20/GP21 for the host link; pass `--link USB` to produce the USB-CDC variant. See [Host link options](#host-link-options) below.
+---
 
 ## Building the firmware
-The images in `dist/` are prebuilt, so building is only necessary to change the configuration or the sources. The build runs in a Docker image that pins the ARM toolchain, the Pico SDK, and picotool (see [`Dockerfile`](Dockerfile)); nothing but Docker is needed on the host.
+Build only if you change the configuration or the sources. The build runs in Docker (toolchain, Pico SDK and picotool are pinned in the [`Dockerfile`](Dockerfile)). The host needs only Docker.
 
 ```
 ./build.sh                      # both targets, UART host link (default)
@@ -48,35 +44,19 @@ The images in `dist/` are prebuilt, so building is only necessary to change the 
 ./build.sh --clean              # discard the build tree and reconfigure
 ```
 
-The script builds the image on first use, compiles into `build/`, and copies the resulting `.uf2` images into `dist/`. It runs the container as your own UID (`--user "$(id -u):$(id -g)"`) so the build tree stays writable — the bind mount does not remap UIDs, so a container running as root would leave `build/` owned by root and unrebuildable without `sudo`.
+The script compiles into `build/` and copies the `.uf2` images into `dist/`. The container runs as your UID, so `build/` stays writable without `sudo`.
 
-Board-level settings — UART pins and baud, relay GPIO, over-current tiers — live in [`hexapod_config.cmake`](hexapod_config.cmake) as cache variables. Override one for a build by passing it through to cmake, e.g. `-DHEXAPOD_UART_BAUD=115200`.
+Board settings (UART pins and baud, relay GPIO, over-current tiers) are cache variables in [`hexapod_config.cmake`](hexapod_config.cmake). Override with cmake flags, e.g. `-DHEXAPOD_UART_BAUD=115200`.
 
 ## Host link options
-The firmware can be built for either UART (default) or USB-CDC. The wire protocol is identical in both modes; only the transport changes.
+The wire protocol is the same for both links. Only the transport changes.
 
-### UART on GP20/GP21 (default)
-`stdio` is routed to **UART1 on GP20 (TX) and GP21 (RX)** at 115200 baud through the pins labelled BG::SDA (GPIO20) and BG::SCL (GPIO21). GP20/GP21 are the only RP2040 UART pin pair that does not collide with the Servo 2040's servo outputs (GP0–GP17), the on-board LED bar (GP18), the ADC mux / user switch (GP22–GP25), or the analog inputs (GP26–GP29). In this mode USB-CDC stdio is disabled, so the USB-C port is only used for power and for flashing `.uf2` images via BOOTSEL. Because UART has no host-side connection event, the LED bar goes straight to the solid-green "connected" state at boot.
+**UART on GP20/GP21 (default, `--link UART`):** UART1, TX on GP20 (BG::SDA), RX on GP21 (BG::SCL), 115200 baud. This is the only RP2040 UART pin pair that does not collide with the servo outputs, LED bar, ADC mux or analog inputs. USB is used only for power and flashing. The LED bar goes solid green at boot.
 
-To build the UART variant explicitly:
-```
-./build.sh --link UART
-```
+**USB-CDC (`--link USB`):** a virtual COM port on the USB-C port. The LEDs show a rainbow pattern until the host opens the port, then go solid green.
 
-### USB-CDC
-`stdio` is routed to the USB-C port as a virtual COM port at the host's chosen baud. On startup, the LEDs perform a cyclic rainbow pattern until the host opens the CDC connection, after which the bar turns solid green.
-
-To build the USB variant:
-```
-./build.sh --link USB
-```
-
-## Powering the board
-The board can be powered via the pins labelled 5v and (-), or the usb connections. See 'Battery Power Warning' above for considerations.
-**Recommended:** when running from a 2s lipo, use a [mini360 step down converter](https://www.google.com/search?q=mini+360+step+down+converter) set to 5V and connected to the aforementioned pins.
-
-## Over-current Trip
-The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and runs each sample through a tiered inverse-time protection table — higher current shortens the trip delay. When any tier's dwell exceeds its debounce, the firmware latches the servo enable off (disables all PWM outputs and de-asserts the relay). Defaults in `src/hexapod-servo2040-firmware/main.h` are sized for the 10 A continuous rating of the screw terminal block:
+## Over-current trip
+The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and uses a tiered inverse-time table. When a tier's dwell exceeds its debounce, the firmware latches the servo enable off (all PWM outputs off, relay off). Defaults in `src/hexapod-servo2040-firmware/main.h` match the 10 A rating of the screw terminal:
 
 | Threshold | Debounce | Purpose                          |
 | --------- | -------- | -------------------------------- |
@@ -84,16 +64,17 @@ The firmware samples the bus current every `OVERCURRENT_SAMPLE_US` (10 ms) and r
 | 12 A      | 200 ms   | Hard over-stress                 |
 | 11 A      | 1 s      | Sustained draw above rated load  |
 
-When a trip latches, the LED bar turns solid red. To recover, the host re-enables with `SET RELAY 1` once the fault condition is cleared (which clears the latch, returns the bar to green, and re-powers a limp rail) and then re-drives the servos with fresh `SET`s. The board **does not resume the pre-trip positions** — the pose that drew the fault current is never re-applied. `SET RELAY 1` is decoupled from driving servos: it powers the rail with every servo limp and never moves a servo on its own — the host energizes servos afterward by `SET`-ing them in any order/batch, so power is only ever applied to host-commanded servos (there is no power-on "center to midpoint" behaviour). See [`protocol.md`](protocol.md#energizing-servos-relay-first-host-ordered) for the full bring-up sequence.
-
-## Servo calibration utility
-Accurate servo positioning requires per-servo PWM calibration values, as demonstrated in MYP's [servo calibration video](https://www.youtube.com/watch?v=UMUeKFPptU4).
-
-To calibrate servos, load the included [servo calibration firmware](dist/servoCalibration.uf2) to the servo2040. This utility streamlines the PWM value acquisition process: a table is produced at the end of the program, which you can copy or screenshot for later use in your host configuration. A tutorial video for using `servoCalibration.uf2` can be found [here](https://youtu.be/w5ZRXiZLpTk).
-
-See [`src/servoCalibration/README.md`](src/servoCalibration/README.md) for step-by-step calibration instructions.
+On a trip, the LED bar goes solid red. To recover, clear the fault, send `SET RELAY 1`, then send new `SET`s to the servos. The board **does not restore the pre-trip positions**. `SET RELAY 1` powers the rail with all servos limp and never moves a servo. See [`protocol.md`](protocol.md#energizing-servos-relay-first-host-ordered) for the full bring-up sequence.
 
 ## Communication protocol
-The firmware implements a thin binary protocol over the host serial link. `SET` writes pulse widths or digital outputs to one or more consecutive pins; `GET` reads the last commanded pulse, the bus voltage/current, or the touch inputs. Command bytes have the MSB set; data bytes do not — this is how the parser resynchronizes after errors. See [`protocol.md`](protocol.md) for the full byte-level specification.
+A thin binary protocol on the host link. `SET` writes pulse widths or digital outputs to one or more consecutive pins. `GET` reads the last commanded pulse, bus voltage/current, or touch inputs. Command bytes have the MSB set; data bytes do not, so the parser can resynchronize after errors.
 
-Battery telemetry (`GET` on the CURR/VOLT indices) replies in fixed-point **centi-units** — the wire count is `round(value * 100)`, so `0.01 A`/`0.01 V` per count. The host recovers engineering units with a single multiply by `0.01` and carries no per-board scaling; the relay pin is board-owned. Touch-sensor `GET`s remain raw ADC-derived codes and are not consumed by the host. See [`protocol.md`](protocol.md) for the unit definition and a worked example.
+Battery telemetry (`GET` on CURR/VOLT) is in centi-units: `count = round(value * 100)`. Multiply by `0.01` to get A or V. Touch-sensor `GET`s return raw ADC-derived codes.
+
+Full byte-level specification: [`protocol.md`](protocol.md).
+
+## Fork origin
+This is a fork of [EddieCarrera/chica-servo2040-simpleDriver](https://github.com/EddieCarrera/chica-servo2040-simpleDriver), originally made for the [MYP project](https://github.com/makeyourpet/hexapod). Differences from upstream:
+- Host link defaults to UART on GP20/GP21; USB-CDC is optional.
+- The GET reply ends with an MSB-set framing byte for unambiguous resync.
+- Firmware-side over-current trip.
