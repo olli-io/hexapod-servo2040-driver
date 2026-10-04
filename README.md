@@ -5,14 +5,14 @@ Firmware for the [Pimoroni Servo 2040](https://shop.pimoroni.com/products/servo-
 > [!WARNING]
 > **External power / battery:** if the servos run at more than 4 V, you **must** cut the 'Separate USB and Ext. Power' trace on the back of the board. If you do not, you can destroy the board or the device connected to the USB.
 
-**Prebuilt firmware images:**
-- [`dist/servo-calibration.uf2`](dist/servo-calibration.uf2) — servo calibration utility
-- [`dist/hexapod-servo2040-firmware.uf2`](dist/hexapod-servo2040-firmware.uf2) — main driver firmware (UART host link)
+**Prebuilt firmware images** ([all releases](https://github.com/olli-io/hexapod-servo2040-driver/releases)):
+- [`servo-calibration.uf2`](https://github.com/olli-io/hexapod-servo2040-driver/releases/latest/download/servo-calibration.uf2) — servo calibration utility
+- [`hexapod-servo2040-firmware.uf2`](https://github.com/olli-io/hexapod-servo2040-driver/releases/latest/download/hexapod-servo2040-firmware.uf2) — main driver firmware (UART host link)
 
 ## 1. Servo calibration utility
 Each servo needs its own PWM calibration values for accurate positioning (see MYP's [servo calibration video](https://www.youtube.com/watch?v=UMUeKFPptU4)).
 
-1. Load [`servo-calibration.uf2`](dist/servo-calibration.uf2) onto the board (see [Loading firmware](#2-loading-firmware)).
+1. Load [`servo-calibration.uf2`](https://github.com/olli-io/hexapod-servo2040-driver/releases/latest/download/servo-calibration.uf2) onto the board (see [Loading firmware](#2-loading-firmware)).
 2. Follow the instructions in [`src/servoCalibration/README.md`](src/servoCalibration/README.md). Tutorial video: [here](https://youtu.be/w5ZRXiZLpTk).
 3. At the end, the utility shows a table of PWM values. Copy or screenshot it for your host configuration.
 

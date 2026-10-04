@@ -25,7 +25,7 @@ whole process.
 
 1. **Load the firmware.** Put the board into BOOTSEL mode (hold *boot/user*,
    press *reset*, release both) and drag
-   [`dist/servo-calibration.uf2`](../../dist/servo-calibration.uf2) onto the drive
+   [`servo-calibration.uf2`](https://github.com/olli-io/hexapod-servo2040-driver/releases/latest/download/servo-calibration.uf2) onto the drive
    that appears. See the [root README](../../README.md#loading-the-firmware-image)
    for details.
 
